@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>PressingPro</title>
+<style>
+:root{
+  --pri:#1a73e8;--pri-d:#1557b0;--pri-l:#e8f0fe;
+  --ok:#34a853;--ok-l:#e6f4ea;--warn:#f9ab00;--warn-l:#fef7e0;--err:#ea4335;--err-l:#fce8e6;
+  --bg:#f8f9fa;--card:#fff;--txt:#202124;--txt2:#5f6368;--brd:#dadce0;
+  --radius:10px;--shadow:0 1px 3px rgba(0,0,0,.12);
+  --side-w:240px;--hdr:56px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--txt);line-height:1.5;overflow-x:hidden}
+a{color:var(--pri);text-decoration:none}
+button{cursor:pointer;font:inherit;border:none;border-radius:6px;padding:8px 16px;transition:background .15s}
+input,select,textarea{font:inherit;padding:8px 12px;border:1px solid var(--brd);border-radius:6px;width:100%;outline:none;transition:border .15s}
+input:focus,select:focus,textarea:focus{border-color:var(--pri)}
+.btn{background:var(--pri);color:#fff;font-weight:500;min-height:44px;min-width:44px}
+.btn:hover{background:var(--pri-d)}
+.btn-o{background:transparent;border:1px solid var(--brd);color:var(--txt)}
+.btn-o:hover{background:var(--pri-l)}
+.btn-d{background:var(--err);color:#fff}.btn-d:hover{background:#c5221f}
+.btn-ok{background:var(--ok);color:#fff}.btn-ok:hover{background:#2d8e47}
+.btn-sm{padding:6px 12px;font-size:.85rem;min-height:36px}
+
+/* Layout */
+#app{display:none}
+.header{position:fixed;top:0;left:0;right:0;height:var(--hdr);background:var(--pri);color:#fff;display:flex;align-items:center;padding:0 16px;z-index:100;gap:12px}
+.header h1{font-size:1.1rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hamburger{display:none;background:none;color:#fff;font-size:1.5rem;padding:8px;min-width:44px;min-height:44px;justify-content:center;align-items:center}
+.header-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+.header-right button{background:rgba(255,255,255,.15);color:#fff;font-size:.85rem}
+.header-right button:hover{background:rgba(255,255,255,.25)}
+
+.sidebar{position:fixed;top:var(--hdr);left:0;bottom:0;width:var(--side-w);background:var(--card);border-right:1px solid var(--brd);overflow-y:auto;z-index:90;transition:transform .25s}
+.sidebar nav{padding:8px}
+.sidebar nav button{display:flex;align-items:center;gap:10px;width:100%;padding:10px 14px;border-radius:8px;background:none;color:var(--txt);font-size:.9rem;text-align:left;min-height:44px}
+.sidebar nav button:hover{background:var(--pri-l)}
+.sidebar nav button.active{background:var(--pri-l);color:var(--pri);font-weight:600}
+.sidebar nav button .icon{font-size:1.2rem;width:24px;text-align:center}
+.sidebar .role-badge{margin:12px 14px;padding:6px 10px;background:var(--pri-l);border-radius:6px;font-size:.8rem;color:var(--pri);text-align:center;font-weight:500}
+
+.main{margin-left:var(--side-w);margin-top:var(--hdr);padding:20px;min-height:calc(100vh - var(--hdr))}
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:85}
+
+@media(max-width:768px){
+  .hamburger{display:flex}
+  .sidebar{transform:translateX(-100%)}
+  .sidebar.open{transform:translateX(0)}
+  .overlay.open{display:block}
+  .main{margin-left:0;padding:12px}
+}
+
+/* Page cards */
+.page{display:none}.page.active{display:block}
+.card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:20px;margin-bottom:16px}
+.card h2{font-size:1.15rem;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+@media(max-width:600px){.grid2,.grid3,.grid4{grid-template-columns:1fr}}
+
+.stat-card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px;text-align:center}
+.stat-card .val{font-size:1.6rem;font-weight:700;color:var(--pri)}
+.stat-card .lbl{font-size:.8rem;color:var(--txt2);margin-top:4px}
+
+.badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:.75rem;font-weight:600}
+.badge-depose{background:#e8f0fe;color:#1a73e8}
+.badge-traitement{background:var(--warn-l);color:#e37400}
+.badge-pret{background:var(--ok-l);color:#137333}
+.badge-livre{background:#e8e8e8;color:#5f6368}
+.badge-annule{background:var(--err-l);color:#c5221f}
+
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--brd)}
+th{font-weight:600;color:var(--txt2);font-size:.8rem;text-transform:uppercase;letter-spacing:.5px}
+tr:hover td{background:var(--pri-l)}
+@media(max-width:600px){table{font-size:.8rem}th,td{padding:8px 6px}}
+
+/* Modal */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;justify-content:center;align-items:flex-start;padding:40px 16px;overflow-y:auto}
+.modal-overlay.open{display:flex}
+.modal{background:var(--card);border-radius:var(--radius);width:100%;max-width:520px;padding:24px;box-shadow:0 8px 30px rgba(0,0,0,.2);animation:slideUp .2s}
+@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.modal h3{font-size:1.1rem;margin-bottom:16px}
+.modal .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px}
+.form-group{margin-bottom:14px}
+.form-group label{display:block;font-size:.85rem;font-weight:500;margin-bottom:4px;color:var(--txt2)}
+
+/* Toast */
+.toast{position:fixed;bottom:20px;right:20px;padding:12px 20px;border-radius:8px;color:#fff;font-size:.9rem;z-index:300;animation:slideUp .3s;max-width:90vw}
+.toast-ok{background:var(--ok)}.toast-err{background:var(--err)}.toast-warn{background:var(--warn)}
+
+/* Spinner */
+.spinner{display:inline-block;width:20px;height:20px;border:3px solid var(--brd);border-top-color:var(--pri);border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading{text-align:center;padding:40px}.loading .spinner{width:32px;height:32px}
+
+/* Print receipt */
+@media print{
+  body *{visibility:hidden}
+  #receipt-print,#receipt-print *{visibility:visible}
+  #receipt-print{position:absolute;top:0;left:0}
+  @page{margin:5mm}
+}
+.receipt{font-family:'Courier New',monospace;font-size:13px;max-width:320px;margin:0 auto}
+.receipt .center{text-align:center}
+.receipt hr{border:none;border-top:1px dashed #000;margin:6px 0}
+.receipt table{font-size:12px}
+.receipt td,.receipt th{padding:2px 4px;border:none}
+
+/* Tabs */
+.tabs{display:flex;gap:0;border-bottom:2px solid var(--brd);margin-bottom:16px;overflow-x:auto}
+.tabs button{padding:10px 18px;background:none;color:var(--txt2);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap;font-weight:500;min-height:44px}
+.tabs button.active{color:var(--pri);border-bottom-color:var(--pri)}
+.tabs button:hover{color:var(--pri)}
+
+/* Search */
+.search-bar{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.search-bar input,.search-bar select{max-width:220px;min-height:44px}
+@media(max-width:600px){.search-bar input,.search-bar select{max-width:100%}}
+
+/* Pagination */
+.pagination{display:flex;justify-content:center;gap:8px;margin-top:16px}
+.pagination button{min-width:36px;min-height:36px;padding:6px 12px;border-radius:6px}
+
+.text-right{text-align:right}
+.text-center{text-align:center}
+.mt-8{margin-top:8px}
+.mt-16{margin-top:16px}
+.mb-8{margin-bottom:8px}
+.gap-8{gap:8px}
+.flex{display:flex}.flex-wrap{flex-wrap:wrap}.items-center{align-items:center}.justify-between{justify-content:space-between}
+.w-full{width:100%}
+.hidden{display:none!important}
+.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px;display:inline-block;vertical-align:middle}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login" style="display:flex;justify-content:center;align-items:center;min-height:100vh;padding:16px">
+  <div class="card" style="max-width:380px;width:100%">
+    <div class="text-center mb-8"><span style="font-size:2.5rem">&#128084;</span></div>
+    <h2 class="text-center" style="margin-bottom:20px">PressingPro</h2>
+    <div id="login-error" style="display:none;background:var(--err-l);color:var(--err);padding:10px;border-radius:6px;margin-bottom:12px;font-size:.9rem"></div>
+    <div class="form-group"><label>Identifiant</label><input id="l-user" autocomplete="username" autofocus></div>
+    <div class="form-group"><label>Mot de passe</label><input id="l-pwd" type="password" autocomplete="current-password"></div>
+    <button class="btn w-full" onclick="doLogin()" id="l-btn">Connexion</button>
+  </div>
+</div>
+
+<!-- CHANGE PASSWORD -->
+<div id="chpwd-modal" class="modal-overlay">
+  <div class="modal">
+    <h3>&#128274; Changement de mot de passe obligatoire</h3>
+    <div id="chpwd-error" style="display:none;background:var(--err-l);color:var(--err);padding:10px;border-radius:6px;margin-bottom:12px;font-size:.9rem"></div>
+    <div class="form-group"><label>Mot de passe actuel</label><input id="ch-cur" type="password"></div>
+    <div class="form-group"><label>Nouveau mot de passe (6+ caractères)</label><input id="ch-new" type="password"></div>
+    <div class="form-group"><label>Confirmer</label><input id="ch-conf" type="password"></div>
+    <div class="actions"><button class="btn" onclick="doChangePwd()">Valider</button></div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <header class="header">
+    <button class="hamburger" onclick="toggleSidebar()">&#9776;</button>
+    <h1 id="shop-title">PressingPro</h1>
+    <div class="header-right">
+      <span id="user-badge" style="font-size:.85rem"></span>
+      <button class="btn-sm" onclick="doLogout()">Déconnexion</button>
+    </div>
+  </header>
+  <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="role-badge" id="role-badge"></div>
+    <nav id="nav"></nav>
+  </aside>
+  <main class="main" id="main-content">
+
+    <!-- DASHBOARD -->
+    <div class="page" id="p-dashboard">
+      <div class="grid4" id="dash-stats"></div>
+      <div class="card mt-16"><h2>&#128200; CA 7 derniers jours</h2><canvas id="dash-chart" height="180"></canvas></div>
+    </div>
+
+    <!-- NOUVELLE COMMANDE -->
+    <div class="page" id="p-neworder">
+      <div class="card">
+        <h2>&#129534; Nouvelle commande</h2>
+        <div class="tabs" id="order-type-tabs">
+          <button class="active" onclick="setOrderType('article')">Par article</button>
+          <button onclick="setOrderType('kilo')">Au kilo</button>
+        </div>
+
+        <!-- Client -->
+        <div class="grid2 mb-8">
+          <div class="form-group"><label>Client *</label><input id="o-client" placeholder="Nom du client" oninput="searchClient(this.value)"><div id="client-suggest" style="position:relative"></div></div>
+          <div class="form-group"><label>Téléphone</label><input id="o-phone" placeholder="Tél"></div>
+        </div>
+
+        <!-- Articles -->
+        <div id="article-section">
+          <div id="catalog-grid" class="grid4 mb-8" style="gap:8px"></div>
+          <div id="cart-section" class="hidden">
+            <h3 style="font-size:.95rem;margin-bottom:8px">&#128722; Panier</h3>
+            <table><thead><tr><th>Article</th><th>Qté</th><th>Prix</th><th></th></tr></thead><tbody id="cart-body"></tbody></table>
+          </div>
+        </div>
+
+        <!-- Kilo -->
+        <div id="kilo-section" class="hidden">
+          <div class="grid2 mb-8">
+            <div class="form-group"><label>Poids (kg) *</label><input id="o-weight" type="number" step="0.1" min="0.1"></div>
+            <div class="form-group"><label>Tarif/kg</label><input id="o-pkg" type="number"></div>
+          </div>
+          <div class="form-group"><label>Description des articles</label><textarea id="o-kitems" rows="2" placeholder="Ex: 5 chemises, 3 pantalons..."></textarea></div>
+        </div>
+
+        <!-- Options -->
+        <div class="grid2 mb-8">
+          <div class="form-group"><label>Paiement *</label>
+            <select id="o-payment"><option>Espèces</option><option>Mobile Money</option><option>Crédit</option></select>
+          </div>
+          <div class="form-group"><label>Date retrait</label><input id="o-promise" type="date"></div>
+        </div>
+
+        <!-- Acompte (visible si Crédit) -->
+        <div id="acompte-section" class="hidden">
+          <div class="grid2 mb-8">
+            <div class="form-group"><label>Acompte (FCFA)</label><input id="o-acompte" type="number" min="0" value="0"></div>
+            <div class="form-group"><label>Règlement acompte</label>
+              <select id="o-acompte-method"><option>Espèces</option><option>Mobile Money</option></select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Remise (caisse/gérant) -->
+        <div id="discount-section" class="hidden">
+          <div class="grid2 mb-8">
+            <div class="form-group"><label>Remise (FCFA)</label><input id="o-discount" type="number" min="0" value="0"></div>
+            <div class="form-group"><label>Motif remise</label><input id="o-disc-reason" placeholder="Motif obligatoire"></div>
+          </div>
+        </div>
+
+        <div class="flex justify-between items-center mt-16" style="flex-wrap:wrap;gap:12px">
+          <div style="font-size:1.3rem;font-weight:700" id="order-total">Total : 0 F</div>
+          <button class="btn" onclick="submitOrder()" id="submit-order-btn">&#9989; Valider la commande</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- COMMANDES -->
+    <div class="page" id="p-orders">
+      <div class="card">
+        <h2>&#128203; Commandes</h2>
+        <div class="search-bar">
+          <input id="os-q" placeholder="Rechercher…" style="flex:1">
+          <select id="os-status"><option value="all">Tous statuts</option><option value="depose">Déposé</option><option value="traitement">Traitement</option><option value="pret">Prêt</option><option value="livre">Livré</option><option value="annule">Annulé</option></select>
+          <button class="btn btn-sm" onclick="loadOrders()">&#128269;</button>
+        </div>
+        <div style="overflow-x:auto"><table><thead><tr><th>Code</th><th>Client</th><th>Total</th><th>Solde</th><th>Statut</th><th>Date</th><th></th></tr></thead><tbody id="orders-body"></tbody></table></div>
+        <div class="pagination" id="orders-pag"></div>
+      </div>
+    </div>
+
+    <!-- DÉTAIL COMMANDE -->
+    <div class="page" id="p-order-detail">
+      <div id="order-detail-content"></div>
+    </div>
+
+    <!-- CLIENTS -->
+    <div class="page" id="p-clients">
+      <div class="card">
+        <h2>&#128101; Clients</h2>
+        <div style="overflow-x:auto"><table><thead><tr><th>Nom</th><th>Téléphone</th><th>Commandes</th><th>CA</th><th>Dû</th></tr></thead><tbody id="clients-body"></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- CATALOGUE -->
+    <div class="page" id="p-catalog">
+      <div class="card">
+        <div class="flex justify-between items-center mb-8">
+          <h2>&#127991;&#65039; Catalogue</h2>
+          <button class="btn btn-sm" onclick="showCatalogModal()">+ Ajouter</button>
+        </div>
+        <div style="overflow-x:auto"><table><thead><tr><th></th><th>Article</th><th>Prix</th><th></th></tr></thead><tbody id="catalog-body"></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- RAPPORTS -->
+    <div class="page" id="p-reports">
+      <div class="card">
+        <h2>&#128202; Rapports</h2>
+        <div class="search-bar">
+          <input id="rp-from" type="date"> <span style="padding:8px">→</span> <input id="rp-to" type="date">
+          <button class="btn btn-sm" onclick="loadReports()">Générer</button>
+        </div>
+        <div id="report-content"></div>
+      </div>
+    </div>
+
+    <!-- PARAMÈTRES -->
+    <div class="page" id="p-settings">
+      <div class="card">
+        <h2>&#9881;&#65039; Paramètres</h2>
+        <div class="grid2">
+          <div class="form-group"><label>Nom du pressing</label><input id="s-name"></div>
+          <div class="form-group"><label>Adresse</label><input id="s-addr"></div>
+          <div class="form-group"><label>Téléphone</label><input id="s-phone"></div>
+          <div class="form-group"><label>NIU</label><input id="s-niu"></div>
+          <div class="form-group"><label>Tarif au kilo (FCFA)</label><input id="s-kilo" type="number"></div>
+          <div class="form-group"><label>Délai par défaut (jours)</label><input id="s-delay" type="number"></div>
+          <div class="form-group"><label>Plafond remise (%)</label><input id="s-maxdisc" type="number" min="0" max="100"></div>
+        </div>
+
+        <hr style="margin:20px 0;border:none;border-top:1px solid var(--brd)">
+        <h3 style="margin-bottom:12px">&#129534; Format de facture</h3>
+        <div class="grid2">
+          <div class="form-group"><label>Format papier</label>
+            <select id="s-invoice-fmt">
+              <option value="A6">A6 (105 × 148 mm)</option>
+              <option value="A5">A5 (148 × 210 mm)</option>
+              <option value="A4">A4 (210 × 297 mm)</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Logo</label>
+            <div class="flex gap-8 items-center">
+              <input type="file" id="s-logo-file" accept="image/*" onchange="previewLogo(this)" style="max-width:200px">
+              <button class="btn-sm btn-d" onclick="removeLogo()" title="Supprimer le logo">&#10005;</button>
+            </div>
+            <div id="s-logo-preview" style="margin-top:8px"></div>
+          </div>
+        </div>
+        <div class="form-group"><label>En-tête personnalisé (texte libre, affiché sous le nom/logo)</label>
+          <textarea id="s-invoice-header" rows="3" placeholder="Ex: RC: ... / NIU: ... / Boîte Postale ..."></textarea>
+        </div>
+        <div class="form-group"><label>Pied de facture</label>
+          <input id="s-invoice-footer" placeholder="Merci de votre confiance !">
+        </div>
+
+        <div class="actions mt-16">
+          <a href="/api/backup" class="btn btn-o btn-sm" download>&#128190; Sauvegarde JSON</a>
+          <button class="btn" onclick="saveSettings()">Enregistrer</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- UTILISATEURS -->
+    <div class="page" id="p-users">
+      <div class="card">
+        <div class="flex justify-between items-center mb-8">
+          <h2>&#128100; Utilisateurs</h2>
+          <button class="btn btn-sm" onclick="showUserModal()">+ Ajouter</button>
+        </div>
+        <div style="overflow-x:auto"><table><thead><tr><th>Identifiant</th><th>Nom</th><th>Rôle</th><th>Actif</th><th></th></tr></thead><tbody id="users-body"></tbody></table></div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- MODALS -->
+<div id="generic-modal" class="modal-overlay"><div class="modal" id="generic-modal-body"></div></div>
+
+<!-- RECEIPT (print) -->
+<div id="receipt-print" style="display:none"></div>
+
+<script src="/app.js"></script>
+</body>
+</html>

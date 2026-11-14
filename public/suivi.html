@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Suivi de commande</title>
+<style>
+:root{--pri:#1a73e8;--ok:#34a853;--ok-l:#e6f4ea;--warn:#f9ab00;--warn-l:#fef7e0;--err:#ea4335;--err-l:#fce8e6;--bg:#f0f4f8;--card:#fff;--txt:#1a1a2e;--txt2:#6b7280;--brd:#e5e7eb;--radius:16px}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--txt);min-height:100vh;padding:16px}
+.container{max-width:480px;margin:0 auto}
+.logo-area{text-align:center;padding:24px 0 8px}
+.logo-area img{max-height:48px;max-width:200px}
+.shop-name{text-align:center;font-size:1.3rem;font-weight:700;color:var(--txt);margin-bottom:4px}
+.shop-phone{text-align:center;font-size:.85rem;color:var(--txt2);margin-bottom:20px}
+
+.card{background:var(--card);border-radius:var(--radius);box-shadow:0 2px 12px rgba(0,0,0,.06);padding:20px;margin-bottom:16px}
+.card h2{font-size:1rem;font-weight:600;color:var(--txt2);margin-bottom:12px;text-transform:uppercase;letter-spacing:.5px;font-size:.8rem}
+
+/* Status badge */
+.status-big{display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:30px;font-weight:700;font-size:1rem;margin-bottom:4px}
+.status-depose{background:#e8f0fe;color:#1a73e8}
+.status-traitement{background:var(--warn-l);color:#b45309}
+.status-pret{background:var(--ok-l);color:#15803d}
+.status-livre{background:#f3f4f6;color:#6b7280}
+.status-annule{background:var(--err-l);color:#dc2626}
+
+/* Progress steps */
+.progress{display:flex;justify-content:space-between;align-items:flex-start;margin:20px 0;position:relative}
+.progress::before{content:'';position:absolute;top:16px;left:24px;right:24px;height:3px;background:var(--brd);z-index:0}
+.progress .bar{position:absolute;top:16px;left:24px;height:3px;background:var(--pri);z-index:1;transition:width .6s ease}
+.step{display:flex;flex-direction:column;align-items:center;position:relative;z-index:2;flex:1}
+.step .dot{width:32px;height:32px;border-radius:50%;background:var(--brd);display:flex;align-items:center;justify-content:center;font-size:1rem;transition:all .3s}
+.step.done .dot{background:var(--pri);color:#fff}
+.step.active .dot{background:var(--pri);color:#fff;box-shadow:0 0 0 4px rgba(26,115,232,.25);animation:pulse 2s infinite}
+.step.cancelled .dot{background:var(--err);color:#fff}
+.step .label{font-size:.7rem;color:var(--txt2);margin-top:6px;text-align:center;max-width:60px}
+.step.done .label,.step.active .label{color:var(--txt);font-weight:600}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 4px rgba(26,115,232,.25)}50%{box-shadow:0 0 0 8px rgba(26,115,232,.1)}}
+
+/* Items */
+.item-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--brd);font-size:.9rem}
+.item-row:last-child{border:none}
+.item-icon{margin-right:6px}
+
+/* Payment */
+.balance-box{text-align:center;padding:16px;border-radius:12px;margin-top:8px}
+.balance-box.due{background:var(--err-l);color:#dc2626}
+.balance-box.paid{background:var(--ok-l);color:#15803d}
+.balance-box .amount{font-size:1.8rem;font-weight:800;line-height:1.2}
+.balance-box .sublabel{font-size:.8rem;margin-top:2px}
+
+.info-row{display:flex;justify-content:space-between;padding:6px 0;font-size:.9rem}
+.info-row .lbl{color:var(--txt2)}
+
+/* Timeline */
+.timeline{padding-left:20px;border-left:2px solid var(--brd)}
+.timeline .ev{padding:8px 0 8px 16px;position:relative;font-size:.85rem}
+.timeline .ev::before{content:'';position:absolute;left:-7px;top:14px;width:12px;height:12px;border-radius:50%;background:var(--pri)}
+.timeline .ev:last-child::before{background:var(--ok)}
+.timeline .ev .time{color:var(--txt2);font-size:.75rem}
+
+.footer{text-align:center;padding:20px 0;font-size:.8rem;color:var(--txt2)}
+
+.loading{text-align:center;padding:60px 20px}
+.spinner{display:inline-block;width:36px;height:36px;border:4px solid var(--brd);border-top-color:var(--pri);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.error-box{text-align:center;padding:60px 20px}
+.error-box .icon{font-size:3rem;margin-bottom:12px}
+.error-box .msg{font-size:1rem;color:var(--txt2)}
+
+/* WhatsApp contact button */
+.wa-btn{display:inline-flex;align-items:center;gap:8px;background:#25D366;color:#fff;padding:12px 24px;border-radius:30px;font-weight:600;text-decoration:none;font-size:.95rem;margin-top:12px;transition:background .15s}
+.wa-btn:hover{background:#1da851}
+</style>
+</head>
+<body>
+
+<div class="container" id="root">
+  <div class="loading"><div class="spinner"></div><p style="margin-top:12px;color:var(--txt2)">Chargement…</p></div>
+</div>
+
+<script>
+const fmt=n=>(n||0).toLocaleString('fr-FR')+' F';
+const STEPS=[
+  {key:'depose',icon:'\u{1F4E5}',label:'Déposé'},
+  {key:'traitement',icon:'\u{1F504}',label:'Traitement'},
+  {key:'pret',icon:'\u{2705}',label:'Prêt'},
+  {key:'livre',icon:'\u{1F4E6}',label:'Livré'}
+];
+const statusLabel=s=>({depose:'Déposé',traitement:'En traitement',pret:'Prêt à retirer',livre:'Livré',annule:'Annulé'})[s]||s;
+const statusIcon=s=>({depose:'\u{1F4E5}',traitement:'\u{1F504}',pret:'\u{2705}',livre:'\u{1F4E6}',annule:'\u{274C}'})[s]||'\u{1F4CB}';
+const statusIdx=s=>STEPS.findIndex(x=>x.key===s);
+
+async function load(){
+  const token=location.pathname.split('/suivi/')[1];
+  if(!token){showError('Lien invalide');return;}
+  try{
+    const r=await fetch('/api/track/'+encodeURIComponent(token));
+    const d=await r.json();
+    if(!r.ok){showError(d.error||'Commande introuvable');return;}
+    render(d);
+  }catch(e){showError('Impossible de charger les données');}
+}
+
+function showError(msg){
+  document.getElementById('root').innerHTML=`<div class="error-box"><div class="icon">\u{1F615}</div><div class="msg">${msg}</div></div>`;
+}
+
+function render(d){
+  const cancelled=d.status==='annule';
+  const idx=statusIdx(d.status);
+  const barPct=cancelled?0:idx<0?0:Math.min(100,idx/(STEPS.length-1)*100);
+
+  let html=``;
+  // Header
+  if(d.shop_logo) html+=`<div class="logo-area"><img src="${d.shop_logo}" alt="Logo"></div>`;
+  html+=`<div class="shop-name">${d.shop_name||'Light Pressing'}</div>`;
+  if(d.shop_phone) html+=`<div class="shop-phone">\u{1F4DE} ${d.shop_phone}</div>`;
+
+  // Status card
+  html+=`<div class="card" style="text-align:center">
+    <div class="status-big status-${d.status}">${statusIcon(d.status)} ${statusLabel(d.status)}</div>
+    <div style="margin-top:6px;font-size:.85rem;color:var(--txt2)">Commande <strong>${d.code}</strong></div>
+    <div style="font-size:.8rem;color:var(--txt2)">${d.client_name}</div>
+  </div>`;
+
+  // Progress bar
+  if(!cancelled){
+    html+=`<div class="card"><h2>Progression</h2><div class="progress">
+      <div class="bar" style="width:${barPct}%"></div>`;
+    STEPS.forEach((s,i)=>{
+      const cls=i<idx?'done':i===idx?'active':'';
+      html+=`<div class="step ${cls}"><div class="dot">${s.icon}</div><div class="label">${s.label}</div></div>`;
+    });
+    html+=`</div></div>`;
+  } else {
+    html+=`<div class="card" style="text-align:center"><span style="font-size:2rem">\u{274C}</span><p style="color:var(--err);font-weight:600;margin-top:8px">Commande annulée</p></div>`;
+  }
+
+  // Articles
+  html+=`<div class="card"><h2>\u{1F9FA} Détails</h2>`;
+  if(d.type==='article'&&d.items&&d.items.length){
+    d.items.forEach(i=>{html+=`<div class="item-row"><span><span class="item-icon">${i.icon||'\u{1F9FA}'}</span>${i.name} × ${i.qty}</span><span>${fmt(i.price*i.qty)}</span></div>`;});
+  } else if(d.type==='kilo'){
+    html+=`<div class="item-row"><span>\u{2696}\u{FE0F} ${d.weight} kg × ${fmt(d.price_kg)}/kg</span><span>${fmt(d.subtotal)}</span></div>`;
+    if(d.kilo_items) html+=`<div style="font-size:.85rem;color:var(--txt2);padding:4px 0">${d.kilo_items}</div>`;
+  }
+  if(d.discount) html+=`<div class="item-row"><span>Remise</span><span>-${fmt(d.discount)}</span></div>`;
+  html+=`<div class="item-row" style="font-weight:700;font-size:1rem;border:none;padding-top:12px"><span>Total</span><span>${fmt(d.total)}</span></div>`;
+  html+=`</div>`;
+
+  // Balance
+  html+=`<div class="card"><h2>\u{1F4B0} Paiement</h2>`;
+  if(d.balance>0){
+    html+=`<div class="balance-box due"><div class="sublabel">Reste à payer</div><div class="amount">${fmt(d.balance)}</div>
+      <div class="sublabel" style="margin-top:4px">Déjà versé : ${fmt(d.paid_total)} sur ${fmt(d.total)}</div></div>`;
+  } else {
+    html+=`<div class="balance-box paid"><div class="amount">\u{2705} Soldé</div><div class="sublabel">Total : ${fmt(d.total)}</div></div>`;
+  }
+  html+=`</div>`;
+
+  // Info
+  html+=`<div class="card"><h2>ℹ\u{FE0F} Informations</h2>
+    <div class="info-row"><span class="lbl">Déposé le</span><span>${new Date(d.created_at).toLocaleString('fr-FR')}</span></div>`;
+  if(d.promise_date) html+=`<div class="info-row"><span class="lbl">Retrait prévu</span><span>${d.promise_date}</span></div>`;
+  if(d.delivered_at) html+=`<div class="info-row"><span class="lbl">Livré le</span><span>${new Date(d.delivered_at).toLocaleString('fr-FR')}</span></div>`;
+  html+=`</div>`;
+
+  // Timeline
+  if(d.history&&d.history.length>1){
+    html+=`<div class="card"><h2>\u{1F4DC} Historique</h2><div class="timeline">`;
+    d.history.forEach(h=>{
+      html+=`<div class="ev"><strong>${statusLabel(h.status)}</strong><div class="time">${new Date(h.at).toLocaleString('fr-FR')}</div></div>`;
+    });
+    html+=`</div></div>`;
+  }
+
+  // Contact shop
+  if(d.shop_phone){
+    const clean=d.shop_phone.replace(/\s/g,'').replace(/^\+/,'');
+    html+=`<div style="text-align:center;margin:8px 0"><a href="https://wa.me/${clean}" target="_blank" class="wa-btn">\u{1F4AC} Contacter le pressing</a></div>`;
+  }
+
+  html+=`<div class="footer">Powered by Light Pressing</div>`;
+  document.getElementById('root').innerHTML=html;
+
+  // Title
+  document.title=`Suivi ${d.code} — ${d.shop_name||'Light Pressing'}`;
+}
+
+load();
+// Auto-refresh toutes les 60 secondes
+setInterval(load,60000);
+</script>
+</body>
+</html>
