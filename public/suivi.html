@@ -82,6 +82,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 </div>
 
 <script>
+const esc=t=>String(t??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
 const fmt=n=>(n||0).toLocaleString('fr-FR')+' F';
 const STEPS=[
   {key:'depose',icon:'\u{1F4E5}',label:'Déposé'},
@@ -105,7 +106,7 @@ async function load(){
 }
 
 function showError(msg){
-  document.getElementById('root').innerHTML=`<div class="error-box"><div class="icon">\u{1F615}</div><div class="msg">${msg}</div></div>`;
+  document.getElementById('root').innerHTML=`<div class="error-box"><div class="icon">\u{1F615}</div><div class="msg">${esc(msg)}</div></div>`;
 }
 
 function render(d){
@@ -115,15 +116,15 @@ function render(d){
 
   let html=``;
   // Header
-  if(d.shop_logo) html+=`<div class="logo-area"><img src="${d.shop_logo}" alt="Logo"></div>`;
-  html+=`<div class="shop-name">${d.shop_name||'Light Pressing'}</div>`;
-  if(d.shop_phone) html+=`<div class="shop-phone">\u{1F4DE} ${d.shop_phone}</div>`;
+  if(d.shop_logo) html+=`<div class="logo-area"><img src="${esc(d.shop_logo)}" alt="Logo"></div>`;
+  html+=`<div class="shop-name">${esc(d.shop_name||'Light Pressing')}</div>`;
+  if(d.shop_phone) html+=`<div class="shop-phone">\u{1F4DE} ${esc(d.shop_phone)}</div>`;
 
   // Status card
   html+=`<div class="card" style="text-align:center">
-    <div class="status-big status-${d.status}">${statusIcon(d.status)} ${statusLabel(d.status)}</div>
-    <div style="margin-top:6px;font-size:.85rem;color:var(--txt2)">Commande <strong>${d.code}</strong></div>
-    <div style="font-size:.8rem;color:var(--txt2)">${d.client_name}</div>
+    <div class="status-big status-${esc(d.status)}">${statusIcon(d.status)} ${statusLabel(d.status)}</div>
+    <div style="margin-top:6px;font-size:.85rem;color:var(--txt2)">Commande <strong>${esc(d.code)}</strong></div>
+    <div style="font-size:.8rem;color:var(--txt2)">${esc(d.client_name)}</div>
   </div>`;
 
   // Progress bar
@@ -142,10 +143,10 @@ function render(d){
   // Articles
   html+=`<div class="card"><h2>\u{1F9FA} Détails</h2>`;
   if(d.type==='article'&&d.items&&d.items.length){
-    d.items.forEach(i=>{html+=`<div class="item-row"><span><span class="item-icon">${i.icon||'\u{1F9FA}'}</span>${i.name} × ${i.qty}</span><span>${fmt(i.price*i.qty)}</span></div>`;});
+    d.items.forEach(i=>{html+=`<div class="item-row"><span><span class="item-icon">${esc(i.icon||'\u{1F9FA}')}</span>${esc(i.name)} × ${i.qty}</span><span>${fmt(i.price*i.qty)}</span></div>`;});
   } else if(d.type==='kilo'){
     html+=`<div class="item-row"><span>\u{2696}\u{FE0F} ${d.weight} kg × ${fmt(d.price_kg)}/kg</span><span>${fmt(d.subtotal)}</span></div>`;
-    if(d.kilo_items) html+=`<div style="font-size:.85rem;color:var(--txt2);padding:4px 0">${d.kilo_items}</div>`;
+    if(d.kilo_items) html+=`<div style="font-size:.85rem;color:var(--txt2);padding:4px 0">${esc(d.kilo_items)}</div>`;
   }
   if(d.discount) html+=`<div class="item-row"><span>Remise</span><span>-${fmt(d.discount)}</span></div>`;
   html+=`<div class="item-row" style="font-weight:700;font-size:1rem;border:none;padding-top:12px"><span>Total</span><span>${fmt(d.total)}</span></div>`;
@@ -164,7 +165,7 @@ function render(d){
   // Info
   html+=`<div class="card"><h2>ℹ\u{FE0F} Informations</h2>
     <div class="info-row"><span class="lbl">Déposé le</span><span>${new Date(d.created_at).toLocaleString('fr-FR')}</span></div>`;
-  if(d.promise_date) html+=`<div class="info-row"><span class="lbl">Retrait prévu</span><span>${d.promise_date}</span></div>`;
+  if(d.promise_date) html+=`<div class="info-row"><span class="lbl">Retrait prévu</span><span>${esc(d.promise_date)}</span></div>`;
   if(d.delivered_at) html+=`<div class="info-row"><span class="lbl">Livré le</span><span>${new Date(d.delivered_at).toLocaleString('fr-FR')}</span></div>`;
   html+=`</div>`;
 
@@ -172,7 +173,7 @@ function render(d){
   if(d.history&&d.history.length>1){
     html+=`<div class="card"><h2>\u{1F4DC} Historique</h2><div class="timeline">`;
     d.history.forEach(h=>{
-      html+=`<div class="ev"><strong>${statusLabel(h.status)}</strong><div class="time">${new Date(h.at).toLocaleString('fr-FR')}</div></div>`;
+      html+=`<div class="ev"><strong>${esc(statusLabel(h.status))}</strong><div class="time">${new Date(h.at).toLocaleString('fr-FR')}</div></div>`;
     });
     html+=`</div></div>`;
   }
@@ -187,7 +188,7 @@ function render(d){
   document.getElementById('root').innerHTML=html;
 
   // Title
-  document.title=`Suivi ${d.code} — ${d.shop_name||'Light Pressing'}`;
+  document.title=`Suivi ${esc(d.code)} — ${esc(d.shop_name||'Light Pressing')}`;
 }
 
 load();

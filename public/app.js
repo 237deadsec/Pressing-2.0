@@ -32,6 +32,7 @@ let U = null,
     $ = t => document.getElementById(t),
     $$ = t => document.querySelectorAll(t),
     fmt = t => (t || 0).toLocaleString("fr-FR") + " F",
+    esc = t => String(t ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;"),
     api = async (t, e = {}) => {
         t = await fetch(t, {
             headers: {
@@ -44,6 +45,8 @@ let U = null,
         if (t.ok) return e;
         throw new Error(e.error || "Erreur")
     };
+
+let SEARCH_RESULTS = [], USERS_LIST = [];
 
 
 /* ══════ SECTION 2 : AUTHENTIFICATION ══════════════════════════════ */
@@ -216,7 +219,7 @@ function drawBarChart(t, o, i) {
 /* ══════ SECTION 6 : CATALOGUE (GRILLE COMMANDE) & PANIER ════════ */
 
 function renderCatalogGrid() {
-    $("catalog-grid").innerHTML = CAT.map(t => `\n    <button class="btn-o" style="padding:10px;text-align:center;min-height:60px" onclick="addToCart(${t.id})">\n      <div style="font-size:1.3rem">${t.icon}</div>\n      <div style="font-size:.8rem;margin-top:2px">${t.name}</div>\n      <div style="font-size:.75rem;color:var(--txt2)">${fmt(t.price)}</div>\n    </button>`).join("")
+    $("catalog-grid").innerHTML = CAT.map(t => `\n    <button class="btn-o" style="padding:10px;text-align:center;min-height:60px" onclick="addToCart(${t.id})">\n      <div style="font-size:1.3rem">${esc(t.icon)}</div>\n      <div style="font-size:.8rem;margin-top:2px">${esc(t.name)}</div>\n      <div style="font-size:.75rem;color:var(--txt2)">${fmt(t.price)}</div>\n    </button>`).join("")
 }
 
 function addToCart(e) {
@@ -234,7 +237,7 @@ function renderCart() {
     try {
         sessionStorage.setItem("pp_cart", JSON.stringify(CART))
     } catch (t) {}
-    CART.length ? ($("cart-section").classList.remove("hidden"), $("cart-body").innerHTML = CART.map((t, e) => `<tr>\n    <td>${t.icon} ${t.name}</td>\n    <td style="width:100px"><div class="flex items-center gap-8">\n      <button class="btn-o btn-sm" onclick="cartQty(${e},-1)" style="padding:4px 10px">−</button>\n      <span>${t.qty}</span>\n      <button class="btn-o btn-sm" onclick="cartQty(${e},1)" style="padding:4px 10px">+</button>\n    </div></td>\n    <td class="text-right">${fmt(t.price*t.qty)}</td>\n    <td><button class="btn-sm" style="background:none;color:var(--err)" onclick="cartRemove(${e})">✕</button></td>\n  </tr>`).join("")) : $("cart-section").classList.add("hidden"), updateTotal()
+    CART.length ? ($("cart-section").classList.remove("hidden"), $("cart-body").innerHTML = CART.map((t, e) => `<tr>\n    <td>${esc(t.icon)} ${esc(t.name)}</td>\n    <td style="width:100px"><div class="flex items-center gap-8">\n      <button class="btn-o btn-sm" onclick="cartQty(${e},-1)" style="padding:4px 10px">−</button>\n      <span>${t.qty}</span>\n      <button class="btn-o btn-sm" onclick="cartQty(${e},1)" style="padding:4px 10px">+</button>\n    </div></td>\n    <td class="text-right">${fmt(t.price*t.qty)}</td>\n    <td><button class="btn-sm" style="background:none;color:var(--err)" onclick="cartRemove(${e})">✕</button></td>\n  </tr>`).join("")) : $("cart-section").classList.add("hidden"), updateTotal()
 }
 
 function cartQty(t, e) {
@@ -276,14 +279,16 @@ let searchTimer;
 function searchClient(e) {
     clearTimeout(searchTimer), e.length < 2 ? $("client-suggest").innerHTML = "" : searchTimer = setTimeout(async () => {
         try {
-            var t = await api("/api/clients/search?q=" + encodeURIComponent(e));
-            t.length ? $("client-suggest").innerHTML = '<div style="position:absolute;top:0;left:0;right:0;background:#fff;border:1px solid var(--brd);border-radius:6px;box-shadow:var(--shadow);z-index:10;max-height:200px;overflow-y:auto">' + t.map(t => `<div style="padding:10px;cursor:pointer;min-height:44px;display:flex;align-items:center" onclick="pickClient('${t.name.replace(/'/g,"\\'")}','${(t.phone||"").replace(/'/g,"\\'")}')">${t.name} <span style="color:var(--txt2);margin-left:8px">${t.phone||""}</span></div>`).join("") + "</div>" : $("client-suggest").innerHTML = ""
+            SEARCH_RESULTS = await api("/api/clients/search?q=" + encodeURIComponent(e));
+            SEARCH_RESULTS.length ? $("client-suggest").innerHTML = '<div style="position:absolute;top:0;left:0;right:0;background:#fff;border:1px solid var(--brd);border-radius:6px;box-shadow:var(--shadow);z-index:10;max-height:200px;overflow-y:auto">' + SEARCH_RESULTS.map((t,i) => `<div style="padding:10px;cursor:pointer;min-height:44px;display:flex;align-items:center" onclick="pickClient(${i})">${esc(t.name)} <span style="color:var(--txt2);margin-left:8px">${esc(t.phone||"")}</span></div>`).join("") + "</div>" : $("client-suggest").innerHTML = ""
         } catch (t) {}
     }, 300)
 }
 
-function pickClient(t, e) {
-    $("o-client").value = t, $("o-phone").value = e, $("client-suggest").innerHTML = ""
+function pickClient(i) {
+    var t = SEARCH_RESULTS[i];
+    if(t) $("o-client").value = t.name, $("o-phone").value = t.phone||"";
+    $("client-suggest").innerHTML = ""
 }
 
 async function submitOrder() {
@@ -348,12 +353,12 @@ function showReceipt(t, e) {
         r = S.invoice_header || "",
         l = S.invoice_logo || "";
     let d = `<div class="receipt" style="width:${n.w};max-width:100%;font-size:${n.fs};padding:8px">`,
-        c = (l && (d += `<div class="center" style="margin-bottom:4px"><img src="${l}" style="max-height:${"A4"===o?"60px":"40px"};max-width:80%"></div>`), d += `<div class="center" style="font-size:${n.fsh}"><strong>${s}</strong></div>`, S.shop_address && (d += `<div class="center" style="font-size:${n.fs}">${S.shop_address}</div>`), S.shop_phone && (d += `<div class="center" style="font-size:${n.fs}">Tél: ${S.shop_phone}</div>`), S.shop_niu && (d += `<div class="center" style="font-size:${n.fs}">NIU: ${S.shop_niu}</div>`), r && (d += `<div class="center" style="font-size:${n.fs};white-space:pre-line">${r}</div>`), d += `<hr>\n    <div class="center"><strong>${e?"BON DE DÉPÔT":"FACTURE"}</strong></div>\n    ${!e&&t.invoice_no?'<div class="center">N° '+t.invoice_no+"</div>":""}\n    <div>Code : <strong>${t.code}</strong></div>\n    <div>Date : ${new Date(t.created_at).toLocaleString("fr-FR")}</div>\n    <div>Client : ${t.client_name}${t.phone?" — "+t.phone:""}</div>\n    ${t.promise_date?"<div>Retrait prévu : "+t.promise_date+"</div>":""}\n    <hr>`, "article" === t.type && a.length ? (d += '<table><tr><th>Article</th><th style="text-align:right">Qté</th><th style="text-align:right">Prix</th></tr>', a.forEach(t => {
-            d += `<tr><td>${t.name}</td><td style="text-align:right">${t.qty}</td><td style="text-align:right">${fmt(t.price*t.qty)}</td></tr>`
-        }), d += "</table>") : "kilo" === t.type && (d += `<div>${t.weight} kg × ${fmt(t.price_kg)}/kg</div>`, t.kilo_items) && (d += `<div style="font-size:${n.fs}">${t.kilo_items}</div>`), d += `<hr><div><strong>Sous-total : ${fmt(t.subtotal)}</strong></div>`, t.discount && (d += `<div>Remise : -${fmt(t.discount)}${t.discount_reason?" ("+t.discount_reason+")":""}</div>`), d = (d += `<div style="font-size:1.1em"><strong>Total : ${fmt(t.total)}</strong></div>`) + `<hr><div>Payé : ${fmt(t.paid_total)}</div>`, 0 < t.balance ? d += `<div style="color:red"><strong>Reste à payer : ${fmt(t.balance)}</strong></div>` : d += '<div style="color:green"><strong>Soldé</strong></div>', t.payments && t.payments.length && (d += `<div style="font-size:${n.fs};margin-top:4px">Paiements :</div>`, t.payments.forEach(t => {
-            d += `<div style="font-size:${n.fs}">  ${fmt(t.amount)} (${t.method}) — ${new Date(t.created_at).toLocaleString("fr-FR")}</div>`
-        })), d += `<hr><div class="center" style="font-size:${n.fs}">${i}</div></div>`, "");
-    e && t.track_token && t.phone && (l = location.origin + "/suivi/" + t.track_token, o = t.phone.replace(/\s/g, "").replace(/^\+/, ""), r = encodeURIComponent(`Bonjour ${t.client_name},\nVotre dépôt ${t.code} a été enregistré chez ${s}.\n\nSuivez l'avancement ici :\n${l}\n\nMerci pour votre confiance !`), c = `<a href="https://wa.me/${o}?text=${r}" target="_blank" class="btn btn-sm" style="background:#25D366;border:none;display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:#fff">💬 Envoyer sur WhatsApp</a>`), showModal(`<h3>${e?"🧾 Bon de dépôt":"🧾 Facture"}</h3>${d}\n    <div class="actions"><button class="btn-o" onclick="closeModal()">Fermer</button>\n    ${c}\n    <button class="btn" onclick="printReceipt()">🖨️ Imprimer</button></div>`), $("receipt-print").innerHTML = d
+        c = (l && (d += `<div class="center" style="margin-bottom:4px"><img src="${esc(l)}" style="max-height:${"A4"===o?"60px":"40px"};max-width:80%"></div>`), d += `<div class="center" style="font-size:${n.fsh}"><strong>${esc(s)}</strong></div>`, S.shop_address && (d += `<div class="center" style="font-size:${n.fs}">${esc(S.shop_address)}</div>`), S.shop_phone && (d += `<div class="center" style="font-size:${n.fs}">Tél: ${esc(S.shop_phone)}</div>`), S.shop_niu && (d += `<div class="center" style="font-size:${n.fs}">NIU: ${esc(S.shop_niu)}</div>`), r && (d += `<div class="center" style="font-size:${n.fs};white-space:pre-line">${esc(r)}</div>`), d += `<hr>\n    <div class="center"><strong>${e?"BON DE DÉPÔT":"FACTURE"}</strong></div>\n    ${!e&&t.invoice_no?'<div class="center">N° '+esc(t.invoice_no)+"</div>":""}\n    <div>Code : <strong>${esc(t.code)}</strong></div>\n    <div>Date : ${new Date(t.created_at).toLocaleString("fr-FR")}</div>\n    <div>Client : ${esc(t.client_name)}${t.phone?" — "+esc(t.phone):""}</div>\n    ${t.promise_date?"<div>Retrait prévu : "+esc(t.promise_date)+"</div>":""}\n    <hr>`, "article" === t.type && a.length ? (d += '<table><tr><th>Article</th><th style="text-align:right">Qté</th><th style="text-align:right">Prix</th></tr>', a.forEach(t => {
+            d += `<tr><td>${esc(t.name)}</td><td style="text-align:right">${t.qty}</td><td style="text-align:right">${fmt(t.price*t.qty)}</td></tr>`
+        }), d += "</table>") : "kilo" === t.type && (d += `<div>${t.weight} kg × ${fmt(t.price_kg)}/kg</div>`, t.kilo_items) && (d += `<div style="font-size:${n.fs}">${esc(t.kilo_items)}</div>`), d += `<hr><div><strong>Sous-total : ${fmt(t.subtotal)}</strong></div>`, t.discount && (d += `<div>Remise : -${fmt(t.discount)}${t.discount_reason?" ("+esc(t.discount_reason)+")":""}</div>`), d = (d += `<div style="font-size:1.1em"><strong>Total : ${fmt(t.total)}</strong></div>`) + `<hr><div>Payé : ${fmt(t.paid_total)}</div>`, 0 < t.balance ? d += `<div style="color:red"><strong>Reste à payer : ${fmt(t.balance)}</strong></div>` : d += '<div style="color:green"><strong>Soldé</strong></div>', t.payments && t.payments.length && (d += `<div style="font-size:${n.fs};margin-top:4px">Paiements :</div>`, t.payments.forEach(t => {
+            d += `<div style="font-size:${n.fs}">  ${fmt(t.amount)} (${esc(t.method)}) — ${new Date(t.created_at).toLocaleString("fr-FR")}</div>`
+        })), d += `<hr><div class="center" style="font-size:${n.fs}">${esc(i)}</div></div>`, "");
+    e && t.track_token && t.phone && (l = location.origin + "/suivi/" + t.track_token, o = t.phone.replace(/\s/g, "").replace(/^\+/, ""), r = encodeURIComponent(`Bonjour ${esc(t.client_name)},\nVotre dépôt ${esc(t.code)} a été enregistré chez ${esc(s)}.\n\nSuivez l'avancement ici :\n${l}\n\nMerci pour votre confiance !`), c = `<a href="https://wa.me/${o}?text=${r}" target="_blank" class="btn btn-sm" style="background:#25D366;border:none;display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:#fff">💬 Envoyer sur WhatsApp</a>`), showModal(`<h3>${e?"🧾 Bon de dépôt":"🧾 Facture"}</h3>${d}\n    <div class="actions"><button class="btn-o" onclick="closeModal()">Fermer</button>\n    ${c}\n    <button class="btn" onclick="printReceipt()">🖨️ Imprimer</button></div>`), $("receipt-print").innerHTML = d
 }
 
 function printReceipt() {
@@ -368,7 +373,7 @@ async function loadOrders() {
         e = $("os-q").value;
     try {
         var a = await api(`/api/orders?status=${t}&q=${encodeURIComponent(e)}&page=` + ordersPage);
-        $("orders-body").innerHTML = a.orders.map(t => `<tr style="cursor:pointer" onclick="showOrder(${t.id})">\n      <td><strong>${t.code}</strong></td>\n      <td class="truncate">${t.client_name}</td>\n      <td class="text-right">${fmt(t.total)}</td>\n      <td class="text-right" style="color:${0<t.balance?"var(--err)":"var(--ok)"}">${0<t.balance?fmt(t.balance):"Soldé"}</td>\n      <td><span class="badge badge-${t.status}">${statusLabel(t.status)}</span></td>\n      <td style="white-space:nowrap">${t.day}</td>\n      <td><button class="btn-o btn-sm">Voir</button></td>\n    </tr>`).join("") || '<tr><td colspan="7" class="text-center" style="padding:20px;color:var(--txt2)">Aucune commande</td></tr>', $("orders-pag").innerHTML = "", 1 < a.pages && (1 < ordersPage && ($("orders-pag").innerHTML += '<button class="btn-o btn-sm" onclick="ordersPage--;loadOrders()">← Préc</button>'), $("orders-pag").innerHTML += `<span style="padding:8px">${ordersPage}/${a.pages}</span>`, ordersPage < a.pages) && ($("orders-pag").innerHTML += '<button class="btn-o btn-sm" onclick="ordersPage++;loadOrders()">Suiv →</button>')
+        $("orders-body").innerHTML = a.orders.map(t => `<tr style="cursor:pointer" onclick="showOrder(${t.id})">\n      <td><strong>${esc(t.code)}</strong></td>\n      <td class="truncate">${esc(t.client_name)}</td>\n      <td class="text-right">${fmt(t.total)}</td>\n      <td class="text-right" style="color:${0<t.balance?"var(--err)":"var(--ok)"}">${0<t.balance?fmt(t.balance):"Soldé"}</td>\n      <td><span class="badge badge-${t.status}">${statusLabel(t.status)}</span></td>\n      <td style="white-space:nowrap">${t.day}</td>\n      <td><button class="btn-o btn-sm">Voir</button></td>\n    </tr>`).join("") || '<tr><td colspan="7" class="text-center" style="padding:20px;color:var(--txt2)">Aucune commande</td></tr>', $("orders-pag").innerHTML = "", 1 < a.pages && (1 < ordersPage && ($("orders-pag").innerHTML += '<button class="btn-o btn-sm" onclick="ordersPage--;loadOrders()">← Préc</button>'), $("orders-pag").innerHTML += `<span style="padding:8px">${ordersPage}/${a.pages}</span>`, ordersPage < a.pages) && ($("orders-pag").innerHTML += '<button class="btn-o btn-sm" onclick="ordersPage++;loadOrders()">Suiv →</button>')
     } catch (t) {
         toast(t.message, "err")
     }
@@ -396,13 +401,13 @@ async function showOrder(t) {
             } [a.status] || [],
             l = ["depose", "traitement", "pret"].includes(a.status),
             d = 0 < a.balance && "annule" !== a.status;
-        let s = `<div class="card">\n      <div class="flex justify-between items-center" style="flex-wrap:wrap;gap:8px">\n        <h2>${a.code} <span class="badge badge-${a.status}">${statusLabel(a.status)}</span></h2>\n        <button class="btn-o btn-sm" onclick="nav('orders')">← Retour</button>\n      </div>\n      <div class="grid2 mt-8">\n        <div><strong>Client :</strong> ${a.client_name}${a.phone?" — "+a.phone:""}</div>\n        <div><strong>Date :</strong> ${new Date(a.created_at).toLocaleString("fr-FR")}</div>\n        <div><strong>Retrait prévu :</strong> ${a.promise_date||"—"}</div>\n        <div><strong>Paiement :</strong> ${a.payment_mode}</div>\n      </div>\n      <hr style="margin:16px 0;border:none;border-top:1px solid var(--brd)">`;
+        let s = `<div class="card">\n      <div class="flex justify-between items-center" style="flex-wrap:wrap;gap:8px">\n        <h2>${esc(a.code)} <span class="badge badge-${a.status}">${statusLabel(a.status)}</span></h2>\n        <button class="btn-o btn-sm" onclick="nav('orders')">← Retour</button>\n      </div>\n      <div class="grid2 mt-8">\n        <div><strong>Client :</strong> ${esc(a.client_name)}${a.phone?" — "+esc(a.phone):""}</div>\n        <div><strong>Date :</strong> ${new Date(a.created_at).toLocaleString("fr-FR")}</div>\n        <div><strong>Retrait prévu :</strong> ${esc(a.promise_date||"—")}</div>\n        <div><strong>Paiement :</strong> ${esc(a.payment_mode)}</div>\n      </div>\n      <hr style="margin:16px 0;border:none;border-top:1px solid var(--brd)">`;
         "article" === a.type && n.length ? (s += '<table><thead><tr><th>Article</th><th>Qté</th><th class="text-right">Prix</th></tr></thead><tbody>', n.forEach(t => {
-            s += `<tr><td>${t.icon||""} ${t.name}</td><td>${t.qty}</td><td class="text-right">${fmt(t.price*t.qty)}</td></tr>`
-        }), s += "</tbody></table>") : "kilo" === a.type && (s += `<p>${a.weight} kg × ${fmt(a.price_kg)}/kg${a.kilo_items?" — "+a.kilo_items:""}</p>`), s += '<div class="mt-8"><strong>Sous-total :</strong> ' + fmt(a.subtotal), a.discount && (s += " | <strong>Remise :</strong> -" + fmt(a.discount) + (a.discount_reason ? " (" + a.discount_reason + ")" : "")), s = (s += ` | <strong>Total :</strong> ${fmt(a.total)}</div>`) + `<div class="mt-8"><strong>Payé :</strong> ${fmt(a.paid_total)} | <strong style="color:${0<a.balance?"var(--err)":"var(--ok)"}">Solde : ${0<a.balance?fmt(a.balance):"Soldé"}</strong></div>`, a.payments && a.payments.length && (s += `<details class="mt-8"><summary style="cursor:pointer;font-weight:600">💰 Paiements (${a.payments.length})</summary><table><thead><tr><th>Date</th><th>Montant</th><th>Mode</th><th>Par</th></tr></thead><tbody>`, a.payments.forEach(t => {
-            s += `<tr><td>${new Date(t.created_at).toLocaleString("fr-FR")}</td><td>${fmt(t.amount)}</td><td>${t.method}</td><td>${t.created_by}</td></tr>`
+            s += `<tr><td>${esc(t.icon||"")} ${esc(t.name)}</td><td>${t.qty}</td><td class="text-right">${fmt(t.price*t.qty)}</td></tr>`
+        }), s += "</tbody></table>") : "kilo" === a.type && (s += `<p>${a.weight} kg × ${fmt(a.price_kg)}/kg${a.kilo_items?" — "+esc(a.kilo_items):""}</p>`), s += '<div class="mt-8"><strong>Sous-total :</strong> ' + fmt(a.subtotal), a.discount && (s += " | <strong>Remise :</strong> -" + fmt(a.discount) + (a.discount_reason ? " (" + esc(a.discount_reason) + ")" : "")), s = (s += ` | <strong>Total :</strong> ${fmt(a.total)}</div>`) + `<div class="mt-8"><strong>Payé :</strong> ${fmt(a.paid_total)} | <strong style="color:${0<a.balance?"var(--err)":"var(--ok)"}">Solde : ${0<a.balance?fmt(a.balance):"Soldé"}</strong></div>`, a.payments && a.payments.length && (s += `<details class="mt-8"><summary style="cursor:pointer;font-weight:600">💰 Paiements (${a.payments.length})</summary><table><thead><tr><th>Date</th><th>Montant</th><th>Mode</th><th>Par</th></tr></thead><tbody>`, a.payments.forEach(t => {
+            s += `<tr><td>${new Date(t.created_at).toLocaleString("fr-FR")}</td><td>${fmt(t.amount)}</td><td>${esc(t.method)}</td><td>${esc(t.created_by)}</td></tr>`
         }), s += "</tbody></table></details>"), a.status_history && a.status_history.length && (s += `<details class="mt-8"><summary style="cursor:pointer;font-weight:600">📜 Historique statuts (${a.status_history.length})</summary><table><thead><tr><th>Date</th><th>Transition</th><th>Par</th><th>Note</th></tr></thead><tbody>`, a.status_history.forEach(t => {
-            s += `<tr><td>${new Date(t.changed_at).toLocaleString("fr-FR")}</td><td>${t.old_status?statusLabel(t.old_status)+" → ":""}${statusLabel(t.new_status)}</td><td>${t.changed_by}</td><td>${t.note||""}</td></tr>`
+            s += `<tr><td>${new Date(t.changed_at).toLocaleString("fr-FR")}</td><td>${t.old_status?statusLabel(t.old_status)+" → ":""}${statusLabel(t.new_status)}</td><td>${esc(t.changed_by)}</td><td>${esc(t.note||"")}</td></tr>`
         }), s += "</tbody></table></details>"), s += '<div class="flex gap-8 mt-16" style="flex-wrap:wrap">', d && (s += `<button class="btn btn-ok btn-sm" onclick="showPayModal(${a.id},${a.balance})">💵 Encaisser</button>`), r.forEach(t => {
             var e = {
                 traitement: "▶ Traitement",
@@ -410,7 +415,7 @@ async function showOrder(t) {
                 livre: "📦 Livrer"
             } [t] || t;
             s += `<button class="btn btn-sm" onclick="changeStatus(${a.id},'${t}')">${e}</button>`
-        }), l && (s += `<button class="btn-d btn-sm" onclick="changeStatus(${a.id},'annule')">❌ Annuler</button>`), "annule" !== a.status && (s += `<button class="btn-o btn-sm" onclick="printOrder(${a.id},'${"livre"===a.status?"facture":"depot"}')">🖨️ ${"livre"===a.status?"Facture":"Bon"}</button>`), a.track_token && a.phone && (e = location.origin + "/suivi/" + a.track_token, o = a.phone.replace(/\s/g, "").replace(/^\+/, ""), i = encodeURIComponent("Bonjour " + a.client_name + ",\nSuivez votre commande " + a.code + " ici :\n" + e), s = s + `<a href="https://wa.me/${o}?text=${i}" target="_blank" class="btn btn-sm" style="background:#25D366;border:none;display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:#fff">💬 WhatsApp</a>` + `<button class="btn-o btn-sm" onclick="navigator.clipboard.writeText('${e}');toast('Lien copié !','ok')">📋 Copier lien suivi</button>`), s += "</div></div>", $("order-detail-content").innerHTML = s
+        }), l && (s += `<button class="btn-d btn-sm" onclick="changeStatus(${a.id},'annule')">❌ Annuler</button>`), "annule" !== a.status && (s += `<button class="btn-o btn-sm" onclick="printOrder(${a.id},'${"livre"===a.status?"facture":"depot"}')">🖨️ ${"livre"===a.status?"Facture":"Bon"}</button>`), a.track_token && a.phone && (e = location.origin + "/suivi/" + a.track_token, o = a.phone.replace(/\s/g, "").replace(/^\+/, ""), i = encodeURIComponent("Bonjour " + esc(a.client_name) + ",\nSuivez votre commande " + esc(a.code) + " ici :\n" + e), s = s + `<a href="https://wa.me/${o}?text=${i}" target="_blank" class="btn btn-sm" style="background:#25D366;border:none;display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:#fff">💬 WhatsApp</a>` + `<button class="btn-o btn-sm" onclick="navigator.clipboard.writeText('${e}');toast('Lien copié !','ok')">📋 Copier lien suivi</button>`), s += "</div></div>", $("order-detail-content").innerHTML = s
     } catch (t) {
         toast(t.message, "err"), nav("orders")
     }
@@ -463,7 +468,7 @@ async function printOrder(t, e) {
 async function loadClients() {
     try {
         var t = await api("/api/clients");
-        $("clients-body").innerHTML = t.map(t => `<tr>\n      <td>${t.name}</td><td>${t.phone||"—"}</td><td>${t.n}</td><td class="text-right">${fmt(t.ca)}</td>\n      <td class="text-right" style="color:${0<t.due?"var(--err)":"var(--ok)"}">${0<t.due?fmt(t.due):"—"}</td>\n    </tr>`).join("") || '<tr><td colspan="5" class="text-center">Aucun client</td></tr>'
+        $("clients-body").innerHTML = t.map(t => `<tr>\n      <td>${esc(t.name)}</td><td>${esc(t.phone||"—")}</td><td>${t.n}</td><td class="text-right">${fmt(t.ca)}</td>\n      <td class="text-right" style="color:${0<t.due?"var(--err)":"var(--ok)"}">${0<t.due?fmt(t.due):"—"}</td>\n    </tr>`).join("") || '<tr><td colspan="5" class="text-center">Aucun client</td></tr>'
     } catch (t) {
         toast(t.message, "err")
     }
@@ -474,19 +479,20 @@ async function loadClients() {
 
 async function loadCatalogAdmin() {
     try {
-        var t = await api("/api/catalog");
-        $("catalog-body").innerHTML = t.map(t => `<tr>\n      <td style="font-size:1.3rem">${t.icon}</td><td>${t.name}</td><td class="text-right">${fmt(t.price)}</td>\n      <td><button class="btn-o btn-sm" onclick="editCatalogItem(${t.id},'${t.name.replace(/'/g,"\\'")}',${t.price},'${t.icon}')">✏️</button>\n      <button class="btn-sm" style="background:none;color:var(--err)" onclick="deleteCatalogItem(${t.id})">🗑️</button></td>\n    </tr>`).join("")
+        CAT = await api("/api/catalog");
+        $("catalog-body").innerHTML = CAT.map(t => `<tr>\n      <td style="font-size:1.3rem">${esc(t.icon)}</td><td>${esc(t.name)}</td><td class="text-right">${fmt(t.price)}</td>\n      <td><button class="btn-o btn-sm" onclick="editCatalogItem(${t.id})">✏️</button>\n      <button class="btn-sm" style="background:none;color:var(--err)" onclick="deleteCatalogItem(${t.id})">🗑️</button></td>\n    </tr>`).join("")
     } catch (t) {
         toast(t.message, "err")
     }
 }
 
 function showCatalogModal(t, e, a, s) {
-    showModal(`<h3>${t?"Modifier":"Ajouter"} un article</h3>\n    <div class="form-group"><label>Nom</label><input id="cat-name" value="${e||""}"></div>\n    <div class="grid2"><div class="form-group"><label>Prix (FCFA)</label><input id="cat-price" type="number" value="${a||""}"></div>\n    <div class="form-group"><label>Icône</label><input id="cat-icon" value="${s||"🧲"}" maxlength="4"></div></div>\n    <div class="actions"><button class="btn-o" onclick="closeModal()">Annuler</button>\n    <button class="btn" onclick="saveCatalogItem(${t||0})">Enregistrer</button></div>`)
+    showModal(`<h3>${t?"Modifier":"Ajouter"} un article</h3>\n    <div class="form-group"><label>Nom</label><input id="cat-name" value="${esc(e||"")}"></div>\n    <div class="grid2"><div class="form-group"><label>Prix (FCFA)</label><input id="cat-price" type="number" value="${a||""}"></div>\n    <div class="form-group"><label>Icône</label><input id="cat-icon" value="${esc(s||"🧲")}" maxlength="4"></div></div>\n    <div class="actions"><button class="btn-o" onclick="closeModal()">Annuler</button>\n    <button class="btn" onclick="saveCatalogItem(${t||0})">Enregistrer</button></div>`)
 }
 
-function editCatalogItem(t, e, a, s) {
-    showCatalogModal(t, e, a, s)
+function editCatalogItem(id) {
+    var t = CAT.find(c => c.id === id);
+    if(t) showCatalogModal(t.id, t.name, t.price, t.icon)
 }
 
 async function saveCatalogItem(t) {
@@ -526,7 +532,7 @@ async function deleteCatalogItem(t) {
 /* ══════ SECTION 12 : PARAMÈTRES ═════════════════════════════════ */
 
 function loadSettings() {
-    $("s-name").value = S.shop_name || "", $("s-addr").value = S.shop_address || "", $("s-phone").value = S.shop_phone || "", $("s-niu").value = S.shop_niu || "", $("s-kilo").value = S.kilo_price || 700, $("s-delay").value = S.default_delay || 2, $("s-maxdisc").value = S.max_discount_percent ?? 100, $("s-invoice-fmt").value = S.invoice_format || "A6", $("s-invoice-header").value = S.invoice_header || "", $("s-invoice-footer").value = S.invoice_footer || "Merci de votre confiance !", S.invoice_logo ? $("s-logo-preview").innerHTML = `<img src="${S.invoice_logo}" style="max-height:60px;max-width:160px">` : $("s-logo-preview").innerHTML = '<span style="color:var(--txt2);font-size:.85rem">Aucun logo</span>'
+    $("s-name").value = S.shop_name || "", $("s-addr").value = S.shop_address || "", $("s-phone").value = S.shop_phone || "", $("s-niu").value = S.shop_niu || "", $("s-kilo").value = S.kilo_price || 700, $("s-delay").value = S.default_delay || 2, $("s-maxdisc").value = S.max_discount_percent ?? 100, $("s-invoice-fmt").value = S.invoice_format || "A6", $("s-invoice-header").value = S.invoice_header || "", $("s-invoice-footer").value = S.invoice_footer || "Merci de votre confiance !", S.invoice_logo ? $("s-logo-preview").innerHTML = `<img src="${esc(S.invoice_logo)}" style="max-height:60px;max-width:160px">` : $("s-logo-preview").innerHTML = '<span style="color:var(--txt2);font-size:.85rem">Aucun logo</span>'
 }
 
 async function saveSettings() {
@@ -559,7 +565,7 @@ function previewLogo(t) {
             let e = new FileReader;
             e.onload = async function() {
                 var t = e.result;
-                $("s-logo-preview").innerHTML = `<img src="${t}" style="max-height:60px;max-width:160px">`;
+                $("s-logo-preview").innerHTML = `<img src="${esc(t)}" style="max-height:60px;max-width:160px">`;
                 try {
                     await api("/api/settings/logo", {
                         method: "POST",
@@ -592,8 +598,8 @@ async function removeLogo() {
 
 async function loadUsers() {
     try {
-        var t = await api("/api/users");
-        $("users-body").innerHTML = t.map(t => `<tr>\n      <td>${t.username}</td><td>${t.name}</td>\n      <td><span class="badge" style="background:var(--pri-l);color:var(--pri)">${t.role}</span></td>\n      <td>${t.active?"✅":"❌"}</td>\n      <td><button class="btn-o btn-sm" onclick='editUser(${JSON.stringify(t).replace(/'/g,"&#39;")})'> ✏️</button></td>\n    </tr>`).join("")
+        USERS_LIST = await api("/api/users");
+        $("users-body").innerHTML = USERS_LIST.map((t,i) => `<tr>\n      <td>${esc(t.username)}</td><td>${esc(t.name)}</td>\n      <td><span class="badge" style="background:var(--pri-l);color:var(--pri)">${esc(t.role)}</span></td>\n      <td>${t.active?"✅":"❌"}</td>\n      <td><button class="btn-o btn-sm" onclick="editUser(${i})"> ✏️</button></td>\n    </tr>`).join("")
     } catch (t) {
         toast(t.message, "err")
     }
@@ -601,11 +607,12 @@ async function loadUsers() {
 
 function showUserModal(t) {
     var e = !!t;
-    showModal(`<h3>${e?"Modifier":"Nouvel"} utilisateur</h3>\n    ${e?"":'<div class="form-group"><label>Identifiant</label><input id="u-login"></div>'}\n    <div class="form-group"><label>Nom</label><input id="u-name" value="${t?.name||""}"></div>\n    <div class="form-group"><label>Rôle</label><select id="u-role">\n      <option ${"caisse"===t?.role?"selected":""}>caisse</option>\n      <option ${"gerant"===t?.role?"selected":""}>gerant</option></select></div>\n    <div class="form-group"><label>${e?"Nouveau mot de passe (vide = inchangé)":"Mot de passe"}</label><input id="u-pwd" type="password"></div>\n    ${e?`<div class="form-group"><label><input type="checkbox" id="u-active" ${t.active?"checked":""}> Actif</label></div>`:""} \n    <div class="actions"><button class="btn-o" onclick="closeModal()">Annuler</button>\n    <button class="btn" onclick="saveUser(${t?.id||0})">Enregistrer</button></div>`)
+    showModal(`<h3>${e?"Modifier":"Nouvel"} utilisateur</h3>\n    ${e?"":'<div class="form-group"><label>Identifiant</label><input id="u-login"></div>'}\n    <div class="form-group"><label>Nom</label><input id="u-name" value="${esc(t?.name||"")}"></div>\n    <div class="form-group"><label>Rôle</label><select id="u-role">\n      <option ${"caissier"===t?.role?"selected":""}>caissier</option>\n      <option ${"superviseur"===t?.role?"selected":""}>superviseur</option>\n      <option ${"gerant"===t?.role?"selected":""}>gerant</option></select></div>\n    <div class="form-group"><label>${e?"Nouveau mot de passe (vide = inchangé)":"Mot de passe"}</label><input id="u-pwd" type="password"></div>\n    ${e?`<div class="form-group"><label><input type="checkbox" id="u-active" ${t.active?"checked":""}> Actif</label></div>`:""} \n    <div class="actions"><button class="btn-o" onclick="closeModal()">Annuler</button>\n    <button class="btn" onclick="saveUser(${t?.id||0})">Enregistrer</button></div>`)
 }
 
-function editUser(t) {
-    showUserModal(t)
+function editUser(i) {
+    var t = USERS_LIST[i];
+    if(t) showUserModal(t)
 }
 
 async function saveUser(t) {
@@ -643,11 +650,11 @@ async function loadReports() {
         var t = await api(`/api/reports?from=${$("rp-from").value}&to=` + $("rp-to").value);
         let a = `<div class="grid3 mt-16">\n      <div class="stat-card"><div class="val">${fmt(t.ca)}</div><div class="lbl">CA total</div></div>\n      <div class="stat-card"><div class="val">${t.n}</div><div class="lbl">Commandes</div></div>\n      <div class="stat-card"><div class="val">${fmt(t.avg)}</div><div class="lbl">Panier moyen</div></div>\n      <div class="stat-card"><div class="val">${fmt(t.encaissements)}</div><div class="lbl">Encaissements</div></div>\n      <div class="stat-card"><div class="val">${fmt(t.discounts)}</div><div class="lbl">Remises</div></div>\n      <div class="stat-card"><div class="val">${t.cancelled?.n||0}</div><div class="lbl">Annulées (${fmt(t.cancelled?.v||0)})</div></div>\n    </div>`;
         t.kg && (a += `<p class="mt-8">Kilo : ${t.kg} kg — ${fmt(t.caKilo)}</p>`), a += '<h3 class="mt-16">Par mode de paiement</h3><div class="grid3">', Object.entries(t.byPay || {}).forEach(([t, e]) => {
-            a += `<div class="stat-card"><div class="val">${fmt(e)}</div><div class="lbl">${t}</div></div>`
+            a += `<div class="stat-card"><div class="val">${fmt(e)}</div><div class="lbl">${esc(t)}</div></div>`
         }), a += "</div>", t.top && t.top.length && (a += '<h3 class="mt-16">Top articles</h3><table><thead><tr><th>Article</th><th>Qté</th><th class="text-right">CA</th></tr></thead><tbody>', t.top.forEach(t => {
-            a += `<tr><td>${t.name}</td><td>${t.qty}</td><td class="text-right">${fmt(t.ca)}</td></tr>`
+            a += `<tr><td>${esc(t.name)}</td><td>${t.qty}</td><td class="text-right">${fmt(t.ca)}</td></tr>`
         }), a += "</tbody></table>"), t.credits && t.credits.length && (a += `<h3 class="mt-16" style="color:var(--err)">⚠️ Créances en cours (${t.credits.length})</h3>\n        <table><thead><tr><th>Code</th><th>Client</th><th>Total</th><th>Payé</th><th>Dû</th></tr></thead><tbody>`, t.credits.forEach(t => {
-            a += `<tr style="cursor:pointer" onclick="showOrder(${t.id})"><td>${t.code}</td><td>${t.client_name}</td><td class="text-right">${fmt(t.total)}</td><td class="text-right">${fmt(t.paid_total)}</td><td class="text-right" style="color:var(--err)">${fmt(t.balance)}</td></tr>`
+            a += `<tr style="cursor:pointer" onclick="showOrder(${t.id})"><td>${esc(t.code)}</td><td>${esc(t.client_name)}</td><td class="text-right">${fmt(t.total)}</td><td class="text-right">${fmt(t.paid_total)}</td><td class="text-right" style="color:var(--err)">${fmt(t.balance)}</td></tr>`
         }), a += "</tbody></table>"), $("report-content").innerHTML = a
     } catch (t) {
         toast(t.message, "err")
