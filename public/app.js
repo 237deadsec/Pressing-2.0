@@ -146,6 +146,11 @@ let PAGES = [{
     label: "Clients",
     roles: ["caisse", "gerant"]
 }, {
+    id: "creances",
+    icon: "💰",
+    label: "Créances",
+    roles: ["gerant"]
+}, {
     id: "catalog",
     icon: "🏷️",
     label: "Catalogue",
@@ -178,7 +183,7 @@ function buildNav() {
 function nav(e) {
     currentPage = e, $$("page").forEach(t => t.classList.remove("active"));
     var t = $("p-" + e);
-    t && t.classList.add("active"), $$("#nav button").forEach(t => t.classList.toggle("active", t.dataset.page === e)), $("sidebar").classList.remove("open"), $("overlay").classList.remove("open"), "dashboard" === e && loadDashboard(), "orders" === e && (ordersPage = 1, loadOrders()), "clients" === e && loadClients(), "catalog" === e && loadCatalogAdmin(), "users" === e && loadUsers(), "settings" === e && loadSettings(), "reports" === e && initReports()
+    t && t.classList.add("active"), $$("#nav button").forEach(t => t.classList.toggle("active", t.dataset.page === e)), $("sidebar").classList.remove("open"), $("overlay").classList.remove("open"), "dashboard" === e && loadDashboard(), "orders" === e && (ordersPage = 1, loadOrders()), "clients" === e && loadClients(), "creances" === e && loadCreances(), "catalog" === e && loadCatalogAdmin(), "users" === e && loadUsers(), "settings" === e && loadSettings(), "reports" === e && initReports()
 }
 
 function toggleSidebar() {
@@ -592,6 +597,60 @@ async function saveClient(id) {
     }
 }
 
+
+/* ══════ SECTION 10b : CRÉANCES ═════════════════════════════════ */
+
+async function loadCreances() {
+    try {
+        var data = await api("/api/creances");
+        $("creances-summary").textContent = data.count + " client" + (data.count > 1 ? "s" : "") + " · Total dû : " + fmt(data.total_due) + " F";
+        $("creances-body").innerHTML = data.clients.map(function(c, i) {
+            return '<tr>' +
+                '<td><a href="#" onclick="nav(\'clients\');setTimeout(function(){showClientDetail(' + c.id + ')},300);return false">' + esc(c.name) + '</a></td>' +
+                '<td>' + esc(c.phone || '-') + '</td>' +
+                '<td class="text-right">' + c.unpaid_orders + '</td>' +
+                '<td class="text-right">' + fmt(c.total) + '</td>' +
+                '<td class="text-right">' + fmt(c.paid) + '</td>' +
+                '<td class="text-right" style="color:var(--warn);font-weight:600">' + fmt(c.due) + '</td>' +
+                '<td><button class="btn btn-sm" onclick="quickPayment(' + c.id + ',' + c.due + ',\'' + esc(c.name).replace(/'/g, "\\'") + '\')">💳 Encaisser</button></td>' +
+                '</tr>';
+        }).join("");
+    } catch(t) {
+        toast(t.message, "err");
+    }
+}
+
+function quickPayment(clientId, due, name) {
+    showModal("Encaissement rapide — " + name, '<p style="margin-bottom:12px">Montant dû : <strong style="color:var(--warn)">' + fmt(due) + ' F</strong></p>' +
+        '<label>Montant à encaisser<input id="qp-amount" type="number" value="' + due + '" min="1" max="' + due + '"></label>' +
+        '<label>Mode de paiement<select id="qp-method"><option>Espèces</option><option>Mobile Money</option></select></label>' +
+        '<button class="btn" style="width:100%;margin-top:12px" onclick="submitQuickPayment(' + clientId + ')">Valider le paiement</button>');
+}
+
+async function submitQuickPayment(clientId) {
+    try {
+        var amount = parseInt($("qp-amount").value);
+        var method = $("qp-method").value;
+        if (!amount || amount <= 0) return toast("Montant invalide", "err");
+        // Get unpaid orders for this client
+        var data = await api("/api/clients/" + clientId);
+        var unpaid = data.orders.filter(function(o) { return o.status !== 'annule' && o.total > (o.paid || 0); });
+        if (!unpaid.length) return toast("Aucune commande impayée", "err");
+        // Pay oldest orders first
+        var remaining = amount;
+        for (var i = 0; i < unpaid.length && remaining > 0; i++) {
+            var owed = unpaid[i].total - (unpaid[i].paid || 0);
+            var pay = Math.min(remaining, owed);
+            await api("/api/payments", { method: "POST", body: JSON.stringify({ order_id: unpaid[i].id, amount: pay, method: method }) });
+            remaining -= pay;
+        }
+        closeModal();
+        toast("Paiement enregistré", "ok");
+        loadCreances();
+    } catch(t) {
+        toast(t.message, "err");
+    }
+}
 
 /* ══════ SECTION 11 : CATALOGUE — ADMINISTRATION CRUD ════════════ */
 
