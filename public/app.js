@@ -121,35 +121,31 @@ $("l-pwd").addEventListener("keydown", t => {
 
 /* ══════ SECTION 4 : NAVIGATION & UI ══════════════════════════════ */
 
-/* NOTE: Le frontend utilise "caisse" et "gerant" comme identifiants de rôle.
-   Le backend (server.js) utilise "caissier", "superviseur", "gerant".
-   ⚠️ MISMATCH CONNU — le rôle "superviseur" n'est pas représenté ici. */
-
 let PAGES = [{
     id: "dashboard",
     icon: "📊",
     label: "Tableau de bord",
-    roles: ["caisse", "gerant"]
+    roles: ["caissier", "superviseur", "gerant"]
 }, {
     id: "neworder",
     icon: "🧾",
     label: "Nouvelle commande",
-    roles: ["caisse", "gerant"]
+    roles: ["caissier", "superviseur", "gerant"]
 }, {
     id: "orders",
     icon: "📋",
     label: "Commandes",
-    roles: ["caisse", "gerant"]
+    roles: ["caissier", "superviseur", "gerant"]
 }, {
     id: "clients",
     icon: "👥",
     label: "Clients",
-    roles: ["caisse", "gerant"]
+    roles: ["caissier", "superviseur", "gerant"]
 }, {
     id: "creances",
     icon: "💰",
     label: "Créances",
-    roles: ["gerant"]
+    roles: ["superviseur", "gerant"]
 }, {
     id: "subscriptions",
     icon: "🎫",
@@ -164,7 +160,7 @@ let PAGES = [{
     id: "reports",
     icon: "📈",
     label: "Rapports",
-    roles: ["gerant"]
+    roles: ["superviseur", "gerant"]
 }, {
     id: "settings",
     icon: "⚙️",
@@ -179,7 +175,7 @@ let PAGES = [{
     id: "activity",
     icon: "📜",
     label: "Journal",
-    roles: ["gerant"]
+    roles: ["superviseur", "gerant"]
 }];
 
 function buildNav() {
@@ -999,8 +995,7 @@ async function removeLogo() {
 
 /* ══════ SECTION 13 : GESTION DES UTILISATEURS ═══════════════════ */
 
-/* ⚠️ MISMATCH : showUserModal() ne propose que "caisse" et "gerant".
-   Le backend supporte aussi "superviseur". À corriger en P0.4 ou P1. */
+/* Rôles alignés : caissier, superviseur, gerant (DB + server.js + frontend) */
 
 async function loadUsers() {
     try {
