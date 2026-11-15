@@ -715,6 +715,19 @@ app.get('/api/stats', auth('superviseur', 'gerant'), async (req, res) => {
   res.json({ today, pending, ready, late, due: dueR, days, byStatus });
 });
 
+// P1.5 — Late orders detail for dashboard alerts
+app.get('/api/late-orders', auth('superviseur', 'gerant'), async (req, res) => {
+  const t = localDate();
+  const rows = await qAll(`
+    SELECT o.id, o.code, o.client_name, o.phone, o.status, o.promise_date, o.day,
+      (CURRENT_DATE - o.promise_date::date) AS days_late
+    FROM orders o
+    WHERE o.status IN ('depose','traitement','pret')
+      AND o.promise_date IS NOT NULL AND o.promise_date < $1
+    ORDER BY o.promise_date ASC LIMIT 50`, [t]);
+  res.json(rows);
+});
+
 app.get('/api/reports', auth('gerant'), async (req, res) => {
   const d30 = new Date(); d30.setDate(d30.getDate() - 29);
   const from = DATE_RE.test(req.query.from || '') ? req.query.from : localDate(d30);

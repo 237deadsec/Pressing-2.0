@@ -156,7 +156,27 @@ th,td{text-align:left;padding:12px 14px;border-bottom:1px solid var(--brd)}
 th{font-weight:600;color:var(--txt2);font-size:.78rem;text-transform:uppercase;letter-spacing:.8px}
 tr{transition:background .2s ease}
 tr:hover td{background:rgba(255,255,255,.04)}
-@media(max-width:600px){table{font-size:.8rem}th,td{padding:8px 6px}}
+@media(max-width:600px){
+  table{font-size:.8rem}th,td{padding:8px 6px}
+  .card{padding:16px;margin-bottom:14px;border-radius:12px}
+  .card h2{font-size:1rem}
+  .stat-card{padding:14px}
+  .stat-card .val{font-size:1.3rem}
+  .stat-card .lbl{font-size:.75rem}
+  .flex.justify-between{flex-wrap:wrap;gap:8px}
+  .btn-sm{padding:5px 10px;font-size:.8rem;min-height:32px}
+  .modal{padding:20px;border-radius:12px;max-width:100%}
+  .modal-overlay{padding:16px 8px}
+  .toast{bottom:12px;right:12px;left:12px;text-align:center;font-size:.85rem;padding:12px 16px}
+  .header h1{font-size:1rem}
+  .header-right button{font-size:.78rem;padding:6px 10px}
+}
+@media(max-width:400px){
+  .main{padding:10px}
+  .grid2,.grid3,.grid4{gap:8px}
+  .stat-card .val{font-size:1.1rem}
+  input,select,textarea{padding:8px 10px;font-size:.9rem}
+}
 
 /* Modal */
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:200;justify-content:center;align-items:flex-start;padding:40px 16px;overflow-y:auto;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
@@ -280,6 +300,7 @@ tr:hover td{background:rgba(255,255,255,.04)}
     <!-- DASHBOARD -->
     <div class="page" id="p-dashboard">
       <div class="grid4" id="dash-stats"></div>
+      <div id="dash-alerts" style="margin-top:16px"></div>
       <div class="card mt-16"><h2>&#128200; CA 7 derniers jours</h2><canvas id="dash-chart" height="180"></canvas></div>
     </div>
 

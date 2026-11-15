@@ -201,10 +201,30 @@ function toast(t, e = "ok") {
 async function loadDashboard() {
     try {
         var t = await api("/api/stats");
-        $("dash-stats").innerHTML = `\n      <div class="stat-card"><div class="val">${fmt(t.today.ca)}</div><div class="lbl">CA du jour (${t.today.n} cmd)</div></div>\n      <div class="stat-card"><div class="val" style="color:var(--warn)">${t.pending}</div><div class="lbl">En cours</div></div>\n      <div class="stat-card"><div class="val" style="color:var(--ok)">${t.ready}</div><div class="lbl">Prêtes</div></div>\n      <div class="stat-card"><div class="val" style="color:var(--err)">${t.late}</div><div class="lbl">En retard</div></div>\n    `, drawBarChart($("dash-chart"), t.days.map(t => t.label), t.days.map(t => t.ca))
+        $("dash-stats").innerHTML = `\n      <div class="stat-card"><div class="val">${fmt(t.today.ca)}</div><div class="lbl">CA du jour (${t.today.n} cmd)</div></div>\n      <div class="stat-card"><div class="val" style="color:var(--warn)">${t.pending}</div><div class="lbl">En cours</div></div>\n      <div class="stat-card"><div class="val" style="color:var(--ok)">${t.ready}</div><div class="lbl">Prêtes</div></div>\n      <div class="stat-card"><div class="val" style="color:var(--err)">${t.late}</div><div class="lbl">En retard</div></div>\n    `, drawBarChart($("dash-chart"), t.days.map(t => t.label), t.days.map(t => t.ca));
+        loadLateAlerts()
     } catch (t) {
         toast(t.message, "err")
     }
+}
+
+async function loadLateAlerts() {
+    const el = $("dash-alerts");
+    try {
+        const rows = await api("/api/late-orders");
+        if (!rows.length) { el.innerHTML = ""; return; }
+        el.innerHTML = `<div class="card" style="border-left:4px solid var(--err)">
+          <h2 style="color:var(--err);font-size:1rem;margin-bottom:10px">&#9888;&#65039; Commandes en retard (${rows.length})</h2>
+          <div style="overflow-x:auto"><table><thead><tr><th>Code</th><th>Client</th><th>Statut</th><th>Date promise</th><th class="text-right">Retard</th><th>Actions</th></tr></thead><tbody>${rows.map(r => `<tr>
+            <td><b>${esc(r.code)}</b></td>
+            <td>${esc(r.client_name)}</td>
+            <td>${esc(r.status)}</td>
+            <td>${r.promise_date || "-"}</td>
+            <td class="text-right" style="color:var(--err);font-weight:600">${r.days_late}j</td>
+            <td><button class="btn-sm" onclick="nav('orders');$('search-orders').value='${esc(r.code)}';loadOrders()">Voir</button></td>
+          </tr>`).join("")}</tbody></table></div>
+        </div>`;
+    } catch (e) { el.innerHTML = ""; }
 }
 
 function drawBarChart(t, o, i) {
