@@ -108,6 +108,8 @@ async function initDB() {
   try { await q("ALTER TABLE clients ADD COLUMN IF NOT EXISTS address TEXT DEFAULT ''"); } catch(e) {}
   try { await q("ALTER TABLE clients ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT ''"); } catch(e) {}
   try { await q("CREATE INDEX IF NOT EXISTS ix_orders_client ON orders(client_id)"); } catch(e) {}
+  // P2.1 — catalog categories
+  try { await q("ALTER TABLE catalog ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'Divers'"); } catch(e) {}
 
   // Données initiales
   const hasUsers = await q1('SELECT 1 FROM users LIMIT 1');
@@ -120,13 +122,13 @@ async function initDB() {
   const hasCatalog = await q1('SELECT 1 FROM catalog LIMIT 1');
   if (!hasCatalog) {
     const items = [
-      ['CHEMISE / H',1000,2000,'👔'],['PANTALON',1000,2000,'👖'],['ROBE SIMPLE',2500,5000,'👗'],
-      ['COSTUME 2P',3000,6000,'🤵'],['VESTE / H',2200,2500,'🧥'],['JUPE SIMPLE',1000,2000,'👗'],
-      ['POLO',1000,2000,'👔'],['MANTEAU SIMPLE',2500,5000,'🧥'],['DRAP HOUSSE',1000,2000,'🛏️'],
-      ['PAIRE DE CHAUSSURES',1500,3000,'👟'],['CRAVATE',1000,2000,'🎀'],['COSTUME ENFANT',2000,4000,'🧒'],
-      ['RIDEAU',4000,8000,'🪟'],['PULL-OVER',1000,2000,'🧶'],['COUVERTURE / CVLT',4500,9000,'🛏️']
+      ['CHEMISE / H',1000,2000,'👔','Hauts'],['PANTALON',1000,2000,'👖','Bas'],['ROBE SIMPLE',2500,5000,'👗','Robes'],
+      ['COSTUME 2P',3000,6000,'🤵','Costumes'],['VESTE / H',2200,2500,'🧥','Hauts'],['JUPE SIMPLE',1000,2000,'👗','Bas'],
+      ['POLO',1000,2000,'👔','Hauts'],['MANTEAU SIMPLE',2500,5000,'🧥','Manteaux'],['DRAP HOUSSE',1000,2000,'🛏️','Linge maison'],
+      ['PAIRE DE CHAUSSURES',1500,3000,'👟','Accessoires'],['CRAVATE',1000,2000,'🎀','Accessoires'],['COSTUME ENFANT',2000,4000,'🧒','Costumes'],
+      ['RIDEAU',4000,8000,'🪟','Linge maison'],['PULL-OVER',1000,2000,'🧶','Hauts'],['COUVERTURE / CVLT',4500,9000,'🛏️','Linge maison']
     ];
-    for (const [n, p, pe, i] of items) await q('INSERT INTO catalog(name,price,price_express,icon) VALUES($1,$2,$3,$4)', [n, p, pe, i]);
+    for (const [n, p, pe, i, c] of items) await q('INSERT INTO catalog(name,price,price_express,icon,category) VALUES($1,$2,$3,$4,$5)', [n, p, pe, i, c]);
   }
 
   const DEFAULTS = { shop_name:'Light Pressing', shop_address:'Kribi, Dombe après La scierie MMG', shop_phone:'(+237) 696 52 86 10 / 672 38 08 03', shop_niu:'',
@@ -302,7 +304,7 @@ app.post('/api/logout', (req, res) => {
 app.get('/api/bootstrap', auth(), async (req, res) => {
   res.json({
     user: pub(req.user), settings: await publicSettings(),
-    catalog: await qAll('SELECT id,name,price,price_express,icon FROM catalog WHERE active=true ORDER BY name')
+    catalog: await qAll('SELECT id,name,price,price_express,icon,category FROM catalog WHERE active=true ORDER BY category,name')
   });
 });
 
@@ -321,14 +323,15 @@ app.post('/api/password', auth(), async (req, res) => {
    7. CATALOGUE
    ══════════════════════════════════════════════════════════════════ */
 app.get('/api/catalog', auth(), async (req, res) =>
-  res.json(await qAll('SELECT id,name,price,price_express,icon FROM catalog WHERE active=true ORDER BY name')));
+  res.json(await qAll('SELECT id,name,price,price_express,icon,category FROM catalog WHERE active=true ORDER BY category,name')));
 
 app.post('/api/catalog', auth('gerant'), async (req, res) => {
   const name = String(req.body?.name || '').trim(), price = Math.round(+req.body?.price);
   const price_express = Math.round(+req.body?.price_express || 0);
   const icon = String(req.body?.icon || '🧺').trim().slice(0, 4) || '🧺';
   if (!name || !(price >= 0)) return fail(res, 'Nom et prix valides requis');
-  await q('INSERT INTO catalog(name,price,price_express,icon) VALUES($1,$2,$3,$4)', [name, price, price_express, icon]);
+  const category = String(req.body?.category || 'Divers').trim().slice(0, 50) || 'Divers';
+  await q('INSERT INTO catalog(name,price,price_express,icon,category) VALUES($1,$2,$3,$4,$5)', [name, price, price_express, icon, category]);
   res.json({ ok: true });
 });
 
@@ -337,7 +340,8 @@ app.put('/api/catalog/:id', auth('gerant'), async (req, res) => {
   const price_express = Math.round(+req.body?.price_express || 0);
   const icon = String(req.body?.icon || '🧺').trim().slice(0, 4) || '🧺';
   if (!name || !(price >= 0)) return fail(res, 'Nom et prix valides requis');
-  await q('UPDATE catalog SET name=$1,price=$2,price_express=$3,icon=$4 WHERE id=$5', [name, price, price_express, icon, +req.params.id]);
+  const category = String(req.body?.category || 'Divers').trim().slice(0, 50) || 'Divers';
+  await q('UPDATE catalog SET name=$1,price=$2,price_express=$3,icon=$4,category=$5 WHERE id=$6', [name, price, price_express, icon, category, +req.params.id]);
   res.json({ ok: true });
 });
 

@@ -244,7 +244,18 @@ function drawBarChart(t, o, i) {
 /* ══════ SECTION 6 : CATALOGUE (GRILLE COMMANDE) & PANIER ════════ */
 
 function renderCatalogGrid() {
-    $("catalog-grid").innerHTML = CAT.map(t => `\n    <button class="btn-o" style="padding:10px;text-align:center;min-height:60px" onclick="addToCart(${t.id})">\n      <div style="font-size:1.3rem">${esc(t.icon)}</div>\n      <div style="font-size:.8rem;margin-top:2px">${esc(t.name)}</div>\n      <div style="font-size:.75rem;color:var(--txt2)">${fmt(t.price)}</div>\n    </button>`).join("")
+    const cats = {};
+    CAT.forEach(t => { const c = t.category || 'Divers'; (cats[c] = cats[c] || []).push(t); });
+    let html = '';
+    for (const [cat, items] of Object.entries(cats)) {
+      html += `<div style="margin-bottom:12px"><div style="font-size:.8rem;font-weight:600;opacity:.7;margin-bottom:6px;text-transform:uppercase">${esc(cat)}</div>
+        <div class="grid4">${items.map(t => `<button class="btn-o" style="padding:10px;text-align:center;min-height:60px" onclick="addToCart(${t.id})">
+          <div style="font-size:1.3rem">${esc(t.icon)}</div>
+          <div style="font-size:.8rem;margin-top:2px">${esc(t.name)}</div>
+          <div style="font-size:.75rem;color:var(--txt2)">${fmt(t.price)}</div>
+        </button>`).join("")}</div></div>`;
+    }
+    $("catalog-grid").innerHTML = html;
 }
 
 function addToCart(e) {
@@ -677,26 +688,46 @@ async function submitQuickPayment(clientId) {
 async function loadCatalogAdmin() {
     try {
         CAT = await api("/api/catalog");
-        $("catalog-body").innerHTML = CAT.map(t => `<tr>\n      <td style="font-size:1.3rem">${esc(t.icon)}</td><td>${esc(t.name)}</td><td class="text-right">${fmt(t.price)}</td>\n      <td><button class="btn-o btn-sm" onclick="editCatalogItem(${t.id})">✏️</button>\n      <button class="btn-sm" style="background:none;color:var(--err)" onclick="deleteCatalogItem(${t.id})">🗑️</button></td>\n    </tr>`).join("")
+        $("catalog-body").innerHTML = CAT.map(t => `<tr>
+      <td style="font-size:1.3rem">${esc(t.icon)}</td><td>${esc(t.name)}</td>
+      <td>${esc(t.category||'Divers')}</td><td class="text-right">${fmt(t.price)}</td>
+      <td><button class="btn-o btn-sm" onclick="editCatalogItem(${t.id})">&#9999;&#65039;</button>
+      <button class="btn-sm" style="background:none;color:var(--err)" onclick="deleteCatalogItem(${t.id})">&#128465;&#65039;</button></td>
+    </tr>`).join("")
     } catch (t) {
         toast(t.message, "err")
     }
 }
 
-function showCatalogModal(t, e, a, s) {
-    showModal(`<h3>${t?"Modifier":"Ajouter"} un article</h3>\n    <div class="form-group"><label>Nom</label><input id="cat-name" value="${esc(e||"")}"></div>\n    <div class="grid2"><div class="form-group"><label>Prix (FCFA)</label><input id="cat-price" type="number" value="${a||""}"></div>\n    <div class="form-group"><label>Icône</label><input id="cat-icon" value="${esc(s||"🧲")}" maxlength="4"></div></div>\n    <div class="actions"><button class="btn-o" onclick="closeModal()">Annuler</button>\n    <button class="btn" onclick="saveCatalogItem(${t||0})">Enregistrer</button></div>`)
+function showCatalogModal(t, e, a, s, cat) {
+    const cats = [...new Set(CAT.map(c => c.category || 'Divers'))].sort();
+    const catOptions = cats.map(c => `<option value="${esc(c)}" ${c===(cat||'Divers')?'selected':''}>${esc(c)}</option>`).join('');
+    showModal(`<h3>${t?"Modifier":"Ajouter"} un article</h3>
+    <div class="form-group"><label>Nom</label><input id="cat-name" value="${esc(e||"")}"></div>
+    <div class="grid2"><div class="form-group"><label>Prix (FCFA)</label><input id="cat-price" type="number" value="${a||""}"></div>
+    <div class="form-group"><label>Ic&#244;ne</label><input id="cat-icon" value="${esc(s||"🧺")}" maxlength="4"></div></div>
+    <div class="form-group"><label>Cat&#233;gorie</label>
+      <div style="display:flex;gap:8px"><select id="cat-category" style="flex:1">${catOptions}<option value="__new">+ Nouvelle...</option></select>
+      <input id="cat-category-new" placeholder="Nouvelle cat&#233;gorie" style="flex:1;display:none"></div></div>
+    <div class="actions"><button class="btn-o" onclick="closeModal()">Annuler</button>
+    <button class="btn" onclick="saveCatalogItem(${t||0})">Enregistrer</button></div>`);
+    $('cat-category').onchange = function() {
+      $('cat-category-new').style.display = this.value === '__new' ? '' : 'none';
+    };
 }
 
 function editCatalogItem(id) {
     var t = CAT.find(c => c.id === id);
-    if(t) showCatalogModal(t.id, t.name, t.price, t.icon)
+    if(t) showCatalogModal(t.id, t.name, t.price, t.icon, t.category)
 }
 
 async function saveCatalogItem(t) {
+    const selCat = $("cat-category").value;
     var e = {
         name: $("cat-name").value,
         price: parseInt($("cat-price").value),
-        icon: $("cat-icon").value
+        icon: $("cat-icon").value,
+        category: selCat === '__new' ? ($("cat-category-new").value.trim() || 'Divers') : selCat
     };
     try {
         t ? await api("/api/catalog/" + t, {
