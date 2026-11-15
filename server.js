@@ -730,12 +730,27 @@ app.get('/api/orders/:id/payments', auth(), async (req, res) => {
 /* ══════════════════════════════════════════════════════════════════
    12. CLIENTS
    ══════════════════════════════════════════════════════════════════ */
-app.get('/api/clients', auth('superviseur', 'gerant'), async (req, res) => {
+app.get('/api/clients', auth(), async (req, res) => {
   res.json(await qAll(`SELECT c.id, c.name, c.phone, COUNT(o.id)::int n, COALESCE(SUM(o.total),0)::int ca,
     COALESCE(SUM(CASE WHEN o.status!='annule' THEN o.total - COALESCE(pay.t,0) ELSE 0 END),0)::int due
     FROM clients c LEFT JOIN orders o ON o.client_id=c.id AND o.status!='annule'
     LEFT JOIN (SELECT order_id, SUM(amount) t FROM payments GROUP BY order_id) pay ON pay.order_id=o.id
     GROUP BY c.id ORDER BY ca DESC`));
+});
+
+// P1.2 — Create client standalone
+app.post('/api/clients', auth('superviseur', 'gerant'), async (req, res) => {
+  const { name, phone, email, address, notes } = req.body;
+  if (!name || !name.trim()) return fail(res, 'Nom requis');
+  // Check duplicate
+  const exists = await q1('SELECT id FROM clients WHERE lower(name)=lower($1) AND phone=$2', [name.trim(), (phone||'').trim()]);
+  if (exists) return fail(res, 'Ce client existe déjà');
+  const c = await q1(
+    'INSERT INTO clients(name,phone,email,address,notes) VALUES($1,$2,$3,$4,$5) RETURNING id,name,phone,email,address,notes',
+    [name.trim(), (phone||'').trim(), (email||'').trim(), (address||'').trim(), (notes||'').trim()]
+  );
+  logActivity(req.user, 'create_client', 'client', c.id, c.name);
+  res.json(c);
 });
 
 app.get('/api/clients/search', auth(), async (req, res) => {

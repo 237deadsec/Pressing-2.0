@@ -396,6 +396,7 @@ tr:hover td{background:rgba(255,255,255,.04)}
         <div class="flex justify-between items-center mb-8">
           <h2>&#128101; Clients</h2>
           <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn btn-sm" id="btn-add-client" onclick="newClientModal()" style="display:none">+ Nouveau</button>
             <input id="clients-search-input" placeholder="Rechercher..." style="width:200px" oninput="filterClientsTable()">
             <label style="font-size:.85rem;display:flex;align-items:center;gap:4px;cursor:pointer">
               <input type="checkbox" id="clients-due-only" onchange="filterClientsTable()"> Créances

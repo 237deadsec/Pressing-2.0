@@ -682,8 +682,41 @@ async function loadClients() {
         renderClientsTable();
         $("clients-list-card").style.display = "";
         $("client-detail-card").style.display = "none";
+        // Show add-client button for superviseur/gerant only
+        var btnAdd = $("btn-add-client");
+        if (btnAdd) btnAdd.style.display = (U.role !== 'caissier') ? "" : "none";
     } catch (t) {
         toast(t.message, "err")
+    }
+}
+
+function newClientModal() {
+    modal("Nouveau client",
+        '<div class="form-group"><label>Nom *</label><input id="nc-name" class="w100" placeholder="Nom complet"></div>' +
+        '<div class="form-group"><label>Téléphone</label><input id="nc-phone" class="w100" placeholder="Téléphone"></div>' +
+        '<div class="form-group"><label>Email</label><input id="nc-email" class="w100" placeholder="Email"></div>' +
+        '<div class="form-group"><label>Adresse</label><input id="nc-address" class="w100" placeholder="Adresse"></div>' +
+        '<div class="form-group"><label>Notes</label><textarea id="nc-notes" class="w100" rows="3" placeholder="Notes"></textarea></div>',
+        '<button class="btn" onclick="createClient()">💾 Enregistrer</button>'
+    );
+}
+
+async function createClient() {
+    var name = ($("nc-name").value || "").trim();
+    if (!name) return toast("Le nom est requis", "err");
+    try {
+        var c = await api("/api/clients", "POST", {
+            name: name,
+            phone: ($("nc-phone").value || "").trim(),
+            email: ($("nc-email").value || "").trim(),
+            address: ($("nc-address").value || "").trim(),
+            notes: ($("nc-notes").value || "").trim()
+        });
+        closeModal();
+        toast("Client créé : " + esc(c.name));
+        loadClients();
+    } catch (t) {
+        toast(t.message, "err");
     }
 }
 
@@ -702,7 +735,7 @@ function renderClientsTable() {
             '<td>' + t.n + '</td>' +
             '<td class="text-right">' + fmt(t.ca) + '</td>' +
             '<td class="text-right" style="color:' + (t.due > 0 ? "var(--err)" : "var(--ok)") + '">' + (t.due > 0 ? fmt(t.due) : "—") + '</td>' +
-            '<td><button class="btn-o btn-sm" onclick="event.stopPropagation();editClientModal(' + t.id + ')">✏️</button></td>' +
+            (U.role !== 'caissier' ? '<td><button class="btn-o btn-sm" onclick="event.stopPropagation();editClientModal(' + t.id + ')">✏️</button></td>' : '<td></td>') +
             '</tr>';
     }).join("") || '<tr><td colspan="6" class="text-center">Aucun client</td></tr>';
 }
@@ -734,7 +767,7 @@ async function showClientDetail(id) {
             '<div><strong>Adresse :</strong> ' + esc(c.address || "—") + '</div>' +
             '<div><strong>Notes :</strong> ' + esc(c.notes || "—") + '</div>' +
             '</div>' +
-            '<div style="margin-top:10px"><button class="btn btn-sm" onclick="editClientModal(' + c.id + ')">✏️ Modifier</button></div>' +
+            (U.role !== 'caissier' ? '<div style="margin-top:10px"><button class="btn btn-sm" onclick="editClientModal(' + c.id + ')">✏️ Modifier</button></div>' : '') +
             '</div>';
 
         var ordersHtml = '<h3 style="margin:16px 0 8px">Historique des commandes</h3>';
