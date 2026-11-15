@@ -518,6 +518,46 @@ tr:hover td{background:rgba(255,255,255,.04)}
       </div>
     </div>
 
+    <!-- P2.4 — Journal d'activités -->
+    <div class="page" id="p-activity">
+      <div class="card">
+        <h2>📜 Journal d'activités</h2>
+        <div style="display:flex;flex-wrap:wrap;gap:.5rem;margin:1rem 0">
+          <select id="act-action" class="input" style="width:auto;min-width:140px" onchange="actPage=1;loadActivityLog()">
+            <option value="">— Action —</option>
+            <option value="login">Connexion</option>
+            <option value="create_order">Créer commande</option>
+            <option value="status_change">Changement statut</option>
+            <option value="payment">Paiement</option>
+            <option value="create_catalog">Créer article</option>
+            <option value="update_catalog">Modifier article</option>
+            <option value="delete_catalog">Supprimer article</option>
+            <option value="update_settings">Paramètres</option>
+            <option value="update_client">Modifier client</option>
+            <option value="create_subscription">Créer abonnement</option>
+            <option value="update_subscription">Modifier abonnement</option>
+            <option value="use_subscription">Utiliser abonnement</option>
+            <option value="create_user">Créer utilisateur</option>
+            <option value="update_user">Modifier utilisateur</option>
+          </select>
+          <select id="act-entity" class="input" style="width:auto;min-width:130px" onchange="actPage=1;loadActivityLog()">
+            <option value="">— Entité —</option>
+            <option value="order">Commande</option>
+            <option value="user">Utilisateur</option>
+            <option value="client">Client</option>
+            <option value="catalog">Catalogue</option>
+            <option value="subscription">Abonnement</option>
+            <option value="settings">Paramètres</option>
+          </select>
+          <input id="act-user" class="input" style="width:auto;min-width:130px" placeholder="Utilisateur…" onchange="actPage=1;loadActivityLog()">
+          <input id="act-from" type="date" class="input" style="width:auto" onchange="actPage=1;loadActivityLog()">
+          <input id="act-to" type="date" class="input" style="width:auto" onchange="actPage=1;loadActivityLog()">
+          <button class="btn btn-sm" onclick="resetActivityFilters()">Réinit.</button>
+        </div>
+        <div id="activity-list" style="overflow-x:auto"></div>
+      </div>
+    </div>
+
   </main>
 </div>
 

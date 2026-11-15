@@ -175,6 +175,11 @@ let PAGES = [{
     icon: "👤",
     label: "Utilisateurs",
     roles: ["gerant"]
+}, {
+    id: "activity",
+    icon: "📜",
+    label: "Journal",
+    roles: ["gerant"]
 }];
 
 function buildNav() {
@@ -188,7 +193,7 @@ function buildNav() {
 function nav(e) {
     currentPage = e, $$("page").forEach(t => t.classList.remove("active"));
     var t = $("p-" + e);
-    t && t.classList.add("active"), $$("#nav button").forEach(t => t.classList.toggle("active", t.dataset.page === e)), $("sidebar").classList.remove("open"), $("overlay").classList.remove("open"), "dashboard" === e && loadDashboard(), "orders" === e && (ordersPage = 1, loadOrders()), "clients" === e && loadClients(), "creances" === e && loadCreances(), "catalog" === e && loadCatalogAdmin(), "subscriptions" === e && loadSubscriptions(), "users" === e && loadUsers(), "settings" === e && loadSettings(), "reports" === e && initReports()
+    t && t.classList.add("active"), $$("#nav button").forEach(t => t.classList.toggle("active", t.dataset.page === e)), $("sidebar").classList.remove("open"), $("overlay").classList.remove("open"), "dashboard" === e && loadDashboard(), "orders" === e && (ordersPage = 1, loadOrders()), "clients" === e && loadClients(), "creances" === e && loadCreances(), "catalog" === e && loadCatalogAdmin(), "subscriptions" === e && loadSubscriptions(), "users" === e && loadUsers(), "settings" === e && loadSettings(), "reports" === e && initReports(), "activity" === e && loadActivityLog()
 }
 
 function toggleSidebar() {
@@ -1036,6 +1041,64 @@ function printReport() {
     <body><h1>${title}</h1>${content}</body></html>`);
     w.document.close();
     w.print();
+}
+
+/* ══════ SECTION 14d : JOURNAL D'ACTIVITÉS (P2.4) ═══════════════ */
+
+let actPage = 1;
+async function loadActivityLog() {
+    const p = $("page-activity");
+    if (!p) return;
+    const action = ($("act-action") || {}).value || "";
+    const entity = ($("act-entity") || {}).value || "";
+    const userName = ($("act-user") || {}).value || "";
+    const from = ($("act-from") || {}).value || "";
+    const to = ($("act-to") || {}).value || "";
+    const qs = new URLSearchParams({ page: actPage, limit: 50 });
+    if (action) qs.set("action", action);
+    if (entity) qs.set("entity", entity);
+    if (userName) qs.set("user_name", userName);
+    if (from) qs.set("from", from);
+    if (to) qs.set("to", to);
+    const r = await api("/api/activity-log?" + qs);
+    if (!r.ok) return;
+    const d = r.data;
+    let h = `<table class="table"><thead><tr>
+        <th>Date</th><th>Utilisateur</th><th>Rôle</th>
+        <th>Action</th><th>Entité</th><th>Détail</th>
+    </tr></thead><tbody>`;
+    if (!d.rows.length) {
+        h += `<tr><td colspan="6" style="text-align:center;opacity:.6">Aucune activité</td></tr>`;
+    }
+    for (const r of d.rows) {
+        const dt = new Date(r.created_at);
+        const ds = dt.toLocaleDateString("fr-FR") + " " + dt.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+        h += `<tr>
+            <td>${esc(ds)}</td>
+            <td>${esc(r.user_name)}</td>
+            <td><span class="badge">${esc(r.user_role)}</span></td>
+            <td>${esc(r.action)}</td>
+            <td>${esc(r.entity || "—")}</td>
+            <td>${esc(r.detail || "—")}</td>
+        </tr>`;
+    }
+    h += "</tbody></table>";
+    // pagination
+    if (d.pages > 1) {
+        h += `<div style="display:flex;justify-content:center;gap:.5rem;margin-top:1rem">`;
+        if (actPage > 1) h += `<button class="btn btn-sm" onclick="actPage--;loadActivityLog()">← Précédent</button>`;
+        h += `<span class="badge" style="padding:.5rem 1rem">Page ${d.page} / ${d.pages}</span>`;
+        if (actPage < d.pages) h += `<button class="btn btn-sm" onclick="actPage++;loadActivityLog()">Suivant →</button>`;
+        h += `</div>`;
+    }
+    $("activity-list").innerHTML = h;
+}
+
+function resetActivityFilters() {
+    const ids = ["act-action", "act-entity", "act-user", "act-from", "act-to"];
+    ids.forEach(id => { const el = $(id); if (el) el.value = ""; });
+    actPage = 1;
+    loadActivityLog();
 }
 
 /* ══════ SECTION 15 : MODAL & ÉCOUTEURS GLOBAUX ══════════════════ */

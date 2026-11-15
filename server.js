@@ -122,6 +122,14 @@ async function initDB() {
   )`); } catch(e) {}
   try { await q("CREATE INDEX IF NOT EXISTS ix_subs_client ON subscriptions(client_id)"); } catch(e) {}
 
+  // P2.4 — activity_log (journal d'activités)
+  try { await q(`CREATE TABLE IF NOT EXISTS activity_log(
+    id SERIAL PRIMARY KEY, action TEXT NOT NULL, entity TEXT,
+    entity_id INTEGER, detail TEXT DEFAULT '', user_name TEXT NOT NULL,
+    user_role TEXT NOT NULL, created_at TEXT NOT NULL
+  )`); } catch(e) {}
+  try { await q("CREATE INDEX IF NOT EXISTS ix_actlog_created ON activity_log(created_at DESC)"); } catch(e) {}
+
   // Données initiales
   const hasUsers = await q1('SELECT 1 FROM users LIMIT 1');
   if (!hasUsers) {
@@ -188,6 +196,14 @@ const readToken = t => {
    ══════════════════════════════════════════════════════════════════ */
 const getS = async k => (await q1('SELECT value FROM settings WHERE key=$1', [k]))?.value;
 const setS = (k, v) => q('INSERT INTO settings(key,value) VALUES($1,$2) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value', [k, String(v)]);
+
+/* P2.4 — journal d'activités helper */
+async function logActivity(user, action, entity, entityId, detail) {
+  try {
+    await q('INSERT INTO activity_log(action,entity,entity_id,detail,user_name,user_role,created_at) VALUES($1,$2,$3,$4,$5,$6,$7)',
+      [action, entity||null, entityId||null, String(detail||'').slice(0,500), user.name, user.role, new Date().toISOString()]);
+  } catch(e) { console.error('logActivity err:', e.message); }
+}
 
 async function publicSettings() {
   return {
@@ -304,6 +320,7 @@ app.post('/api/login', async (req, res) => {
   fails.delete(ip);
   fails.delete('u:' + uStr);
   res.setHeader('Set-Cookie', `pp_session=${makeToken(u)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200`);
+  logActivity(u, 'login', 'user', u.id, `Connexion depuis ${ip}`);
   res.json({ user: pub(u) });
 });
 
@@ -343,6 +360,7 @@ app.post('/api/catalog', auth('gerant'), async (req, res) => {
   if (!name || !(price >= 0)) return fail(res, 'Nom et prix valides requis');
   const category = String(req.body?.category || 'Divers').trim().slice(0, 50) || 'Divers';
   await q('INSERT INTO catalog(name,price,price_express,icon,category) VALUES($1,$2,$3,$4,$5)', [name, price, price_express, icon, category]);
+  logActivity(req.user, 'create_catalog', 'catalog', null, `${name} — ${price} FCFA`);
   res.json({ ok: true });
 });
 
@@ -353,11 +371,13 @@ app.put('/api/catalog/:id', auth('gerant'), async (req, res) => {
   if (!name || !(price >= 0)) return fail(res, 'Nom et prix valides requis');
   const category = String(req.body?.category || 'Divers').trim().slice(0, 50) || 'Divers';
   await q('UPDATE catalog SET name=$1,price=$2,price_express=$3,icon=$4,category=$5 WHERE id=$6', [name, price, price_express, icon, category, +req.params.id]);
+  logActivity(req.user, 'update_catalog', 'catalog', +req.params.id, `${name} — ${price} FCFA`);
   res.json({ ok: true });
 });
 
 app.delete('/api/catalog/:id', auth('gerant'), async (req, res) => {
   await q('UPDATE catalog SET active=false WHERE id=$1', [+req.params.id]);
+  logActivity(req.user, 'delete_catalog', 'catalog', +req.params.id, '');
   res.json({ ok: true });
 });
 
@@ -385,6 +405,7 @@ app.put('/api/settings', auth('gerant'), async (req, res) => {
   await setS('invoice_header', String(b.invoice_header || '').trim().slice(0, 500));
   await setS('invoice_footer', String(b.invoice_footer || '').trim().slice(0, 300));
   // Logo is saved via dedicated endpoint
+  logActivity(req.user, 'update_settings', 'settings', null, 'Paramètres modifiés');
   res.json(await publicSettings());
 });
 
@@ -417,6 +438,7 @@ app.post('/api/users', auth('gerant'), async (req, res) => {
   if (!ROLES.includes(b.role)) return fail(res, 'Rôle invalide');
   try {
     await q('INSERT INTO users(username,name,role,pwd,must_change) VALUES($1,$2,$3,$4,true)', [username, name, b.role, await hashPwd(String(b.password))]);
+    logActivity(req.user, 'create_user', 'user', null, `${username} (${b.role})`);
     res.json({ ok: true });
   } catch (e) { fail(res, e.code === '23505' ? 'Cet identifiant existe déjà' : 'Erreur création utilisateur'); }
 });
@@ -439,6 +461,7 @@ app.put('/api/users/:id', auth('gerant'), async (req, res) => {
     pwd = await hashPwd(String(b.password)); mc = true;
   }
   await q('UPDATE users SET role=$1,active=$2,pwd=$3,must_change=$4 WHERE id=$5', [role, active, pwd, mc, t.id]);
+  logActivity(req.user, 'update_user', 'user', t.id, `${t.username} — rôle:${role} actif:${active}`);
   res.json({ ok: true });
 });
 
@@ -529,6 +552,7 @@ app.post('/api/orders', auth(), async (req, res) => {
     }
 
     await client.query('COMMIT');
+    logActivity(u, 'create_order', 'order', orderId, `${code} — ${name} — ${total} FCFA`);
     res.json(await orderWithPayments(orderId));
   } catch (e) {
     await client.query('ROLLBACK');
@@ -606,6 +630,7 @@ app.put('/api/orders/:id/status', auth(), async (req, res) => {
     await client.query('INSERT INTO status_history(order_id,old_status,new_status,changed_at,changed_by,note) VALUES($1,$2,$3,$4,$5,$6)',
       [o.id, o.status, st, now, req.user.username, note]);
     await client.query('COMMIT');
+    logActivity(req.user, 'status_change', 'order', o.id, `${o.code} : ${o.status} → ${st}`);
   } catch (e) { await client.query('ROLLBACK'); throw e; }
   finally { client.release(); }
 
@@ -629,6 +654,7 @@ app.post('/api/orders/:id/pay', auth(), async (req, res) => {
 
   await q('INSERT INTO payments(order_id,amount,method,created_at,created_by) VALUES($1,$2,$3,$4,$5)',
     [o.id, actual, method, new Date().toISOString(), req.user.username]);
+  logActivity(req.user, 'payment', 'order', o.id, `${o.code} — ${actual} FCFA (${method})`);
   res.json(await orderWithPayments(o.id));
 });
 
@@ -686,6 +712,7 @@ app.put('/api/clients/:id', auth('superviseur', 'gerant'), async (req, res) => {
     [name.trim(), (phone||'').trim(), (email||'').trim(), (address||'').trim(), (notes||'').trim(), id]
   );
   if (!updated) return fail(res, 'Client introuvable', 404);
+  logActivity(req.user, 'update_client', 'client', id, updated.name);
   res.json(updated);
 });
 
@@ -726,6 +753,7 @@ app.post('/api/subscriptions', auth('superviseur', 'gerant'), async (req, res) =
   const row = await q1(`INSERT INTO subscriptions(client_id, plan_name, total_articles, amount_paid, start_date, end_date, created_at, created_by, notes)
     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
     [+client_id, String(plan_name).trim().slice(0,100), +total_articles, +(amount_paid||0), start, end, now, req.user.name, String(notes||'').slice(0,500)]);
+  logActivity(req.user, 'create_subscription', 'subscription', row.id, `${plan_name} — ${total_articles} articles`);
   res.status(201).json(row);
 });
 
@@ -737,6 +765,7 @@ app.put('/api/subscriptions/:id', auth('superviseur', 'gerant'), async (req, res
   const newStatus = validStatuses.includes(status) ? status : sub.status;
   const row = await q1(`UPDATE subscriptions SET plan_name=$1, total_articles=$2, amount_paid=$3, end_date=$4, status=$5, notes=$6 WHERE id=$7 RETURNING *`,
     [String(plan_name||sub.plan_name).trim().slice(0,100), +(total_articles||sub.total_articles), +(amount_paid||sub.amount_paid), end_date||sub.end_date, newStatus, String(notes??sub.notes).slice(0,500), +req.params.id]);
+  logActivity(req.user, 'update_subscription', 'subscription', +req.params.id, `Status: ${newStatus}`);
   res.json(row);
 });
 
@@ -749,6 +778,7 @@ app.post('/api/subscriptions/:id/use', auth(), async (req, res) => {
   const newUsed = sub.used_articles + qty;
   const newStatus = newUsed >= sub.total_articles ? 'épuisé' : 'actif';
   const row = await q1('UPDATE subscriptions SET used_articles=$1, status=$2 WHERE id=$3 RETURNING *', [newUsed, newStatus, +req.params.id]);
+  logActivity(req.user, 'use_subscription', 'subscription', +req.params.id, `${qty} article(s) utilisé(s) — ${newUsed}/${sub.total_articles}`);
   res.json(row);
 });
 
@@ -855,6 +885,26 @@ app.get('/api/backup', auth('gerant'), async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="light-pressing-${localDate()}.json"`);
     res.send(JSON.stringify(data, null, 2));
   } catch (e) { fail(res, 'Sauvegarde impossible', 500); }
+});
+
+/* ══════════════════════════════════════════════════════════════════
+   14c. JOURNAL D'ACTIVITÉS (P2.4)
+   ══════════════════════════════════════════════════════════════════ */
+app.get('/api/activity-log', auth('gerant'), async (req, res) => {
+  const page = Math.max(1, +(req.query.page || 1));
+  const limit = Math.min(100, Math.max(10, +(req.query.limit || 50)));
+  const offset = (page - 1) * limit;
+  let where = [], params = [];
+  let pi = 1;
+  if (req.query.action) { where.push(`action=$${pi++}`); params.push(req.query.action); }
+  if (req.query.entity) { where.push(`entity=$${pi++}`); params.push(req.query.entity); }
+  if (req.query.user_name) { where.push(`user_name ILIKE $${pi++}`); params.push(`%${req.query.user_name}%`); }
+  if (DATE_RE.test(req.query.from || '')) { where.push(`created_at >= $${pi++}`); params.push(req.query.from + 'T00:00:00'); }
+  if (DATE_RE.test(req.query.to || '')) { where.push(`created_at <= $${pi++}`); params.push(req.query.to + 'T23:59:59'); }
+  const wc = where.length ? 'WHERE ' + where.join(' AND ') : '';
+  const total = (await q1(`SELECT COUNT(*)::int c FROM activity_log ${wc}`, params)).c;
+  const rows = await qAll(`SELECT * FROM activity_log ${wc} ORDER BY created_at DESC LIMIT $${pi++} OFFSET $${pi++}`, [...params, limit, offset]);
+  res.json({ rows, total, page, pages: Math.ceil(total / limit) });
 });
 
 /* ══════════════════════════════════════════════════════════════════
