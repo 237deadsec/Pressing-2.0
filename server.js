@@ -590,6 +590,70 @@ app.get('/api/orders/:id', auth(), async (req, res) => {
   res.json(o);
 });
 
+/* ── Édition commande (P2.5) — uniquement statut "depose" ── */
+app.put('/api/orders/:id', auth('superviseur', 'gerant'), async (req, res) => {
+  const o = await orderWithPayments(+req.params.id);
+  if (!o) return fail(res, 'Commande introuvable', 404);
+  if (o.status !== 'depose') return fail(res, 'Seules les commandes au statut "déposé" peuvent être modifiées');
+
+  const b = req.body || {};
+  const u = req.user;
+  const type = o.type; // cannot change type
+
+  let items = null, weight = null, price_kg = null, kilo_items = null, subtotal = 0;
+
+  if (type === 'article') {
+    if (!Array.isArray(b.items) || !b.items.length) return fail(res, 'Le panier est vide');
+    const isExpress = !!b.express;
+    items = [];
+    for (const it of b.items) {
+      const c = await q1('SELECT * FROM catalog WHERE id=$1 AND active=true', [+it.id]);
+      const qty = Math.floor(+it.qty);
+      if (!c || !(qty > 0) || qty > 1000) return fail(res, 'Article invalide');
+      const unitPrice = isExpress && c.price_express > 0 ? c.price_express : c.price;
+      items.push({ id: c.id, name: c.name, icon: c.icon, price: unitPrice, qty, express: isExpress });
+      subtotal += unitPrice * qty;
+    }
+  } else {
+    weight = Math.round(+b.weight * 100) / 100;
+    if (!(weight > 0) || weight > 1000) return fail(res, 'Poids invalide');
+    const def = +(await getS('kilo_price'));
+    price_kg = Math.round(+b.price_kg || def);
+    if (!(price_kg > 0)) return fail(res, 'Tarif au kilo invalide');
+    subtotal = Math.round(weight * price_kg);
+    kilo_items = String(b.kilo_items || '').slice(0, 2000);
+  }
+
+  // Remise
+  let discount = 0, discount_reason = null;
+  if (+b.discount > 0) {
+    const maxPct = +(await getS('max_discount_percent') || '100');
+    const maxDisc = Math.round(subtotal * maxPct / 100);
+    discount = Math.max(0, Math.min(maxDisc, Math.round(+b.discount)));
+    if (discount > 0) {
+      discount_reason = String(b.discount_reason || '').trim().slice(0, 200);
+      if (!discount_reason) return fail(res, 'Motif de la remise obligatoire');
+    }
+  }
+  const total = subtotal - discount;
+  const promise = DATE_RE.test(b.promise_date || '') ? b.promise_date : o.promise_date;
+
+  // Vérifier que le total couvre les paiements déjà effectués
+  if (total < o.paid_total) return fail(res, `Le nouveau total (${total}) est inférieur aux paiements déjà effectués (${o.paid_total})`);
+
+  try {
+    await q(`UPDATE orders SET items=$1,weight=$2,price_kg=$3,kilo_items=$4,subtotal=$5,
+      discount=$6,discount_reason=$7,total=$8,promise_date=$9 WHERE id=$10`,
+      [items ? JSON.stringify(items) : null, weight, price_kg, kilo_items, subtotal,
+       discount, discount_reason, total, promise, o.id]);
+    logActivity(u, 'edit_order', 'order', o.id, `${o.code} — total: ${total} FCFA`);
+    res.json(await orderWithPayments(o.id));
+  } catch (e) {
+    console.error('Erreur édition commande:', e.message);
+    fail(res, 'Erreur lors de la modification', 500);
+  }
+});
+
 /* ── Changement de statut (pipeline strict) ── */
 app.put('/api/orders/:id/status', auth(), async (req, res) => {
   const st = req.body?.status;

@@ -461,7 +461,7 @@ async function showOrder(t) {
                 livre: "📦 Livrer"
             } [t] || t;
             s += `<button class="btn btn-sm" onclick="changeStatus(${a.id},'${t}')">${e}</button>`
-        }), l && (s += `<button class="btn-d btn-sm" onclick="changeStatus(${a.id},'annule')">❌ Annuler</button>`), "annule" !== a.status && (s += `<button class="btn-o btn-sm" onclick="printOrder(${a.id},'${"livre"===a.status?"facture":"depot"}')">🖨️ ${"livre"===a.status?"Facture":"Bon"}</button>`), a.track_token && a.phone && (e = location.origin + "/suivi/" + a.track_token, o = a.phone.replace(/\s/g, "").replace(/^\+/, ""), i = encodeURIComponent("Bonjour " + esc(a.client_name) + ",\nSuivez votre commande " + esc(a.code) + " ici :\n" + e), s = s + `<a href="https://wa.me/${o}?text=${i}" target="_blank" class="btn btn-sm" style="background:#25D366;border:none;display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:#fff">💬 WhatsApp</a>` + `<button class="btn-o btn-sm" onclick="navigator.clipboard.writeText('${e}');toast('Lien copié !','ok')">📋 Copier lien suivi</button>`), s += "</div></div>", $("order-detail-content").innerHTML = s
+        }), "depose"===a.status&&["superviseur","gerant"].includes(U.role)&&(s+=`<button class="btn btn-sm" style="background:var(--pri)" onclick="showEditOrderModal(${a.id})">✏️ Éditer</button>`), l && (s += `<button class="btn-d btn-sm" onclick="changeStatus(${a.id},'annule')">❌ Annuler</button>`), "annule" !== a.status && (s += `<button class="btn-o btn-sm" onclick="printOrder(${a.id},'${"livre"===a.status?"facture":"depot"}')">🖨️ ${"livre"===a.status?"Facture":"Bon"}</button>`), a.track_token && a.phone && (e = location.origin + "/suivi/" + a.track_token, o = a.phone.replace(/\s/g, "").replace(/^\+/, ""), i = encodeURIComponent("Bonjour " + esc(a.client_name) + ",\nSuivez votre commande " + esc(a.code) + " ici :\n" + e), s = s + `<a href="https://wa.me/${o}?text=${i}" target="_blank" class="btn btn-sm" style="background:#25D366;border:none;display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:#fff">💬 WhatsApp</a>` + `<button class="btn-o btn-sm" onclick="navigator.clipboard.writeText('${e}');toast('Lien copié !','ok')">📋 Copier lien suivi</button>`), s += "</div></div>", $("order-detail-content").innerHTML = s
     } catch (t) {
         toast(t.message, "err"), nav("orders")
     }
@@ -505,6 +505,174 @@ async function printOrder(t, e) {
         showReceipt(await api("/api/orders/" + t), e)
     } catch (t) {
         toast(t.message, "err")
+    }
+}
+
+/* ── P2.5 : Édition commande post-création ── */
+let EDIT_CART = [], EDIT_ORDER_TYPE = "article";
+
+async function showEditOrderModal(orderId) {
+    try {
+        const o = await api("/api/orders/" + orderId);
+        if (o.status !== "depose") return toast("Seules les commandes au statut déposé peuvent être modifiées", "err");
+
+        EDIT_ORDER_TYPE = o.type;
+        let html = `<h3>✏️ Modifier la commande ${esc(o.code)}</h3>`;
+        html += `<p style="margin-bottom:12px"><strong>Client :</strong> ${esc(o.client_name)} | <strong>Type :</strong> ${o.type === "article" ? "Par article" : "Au kilo"}</p>`;
+
+        if (o.type === "article") {
+            // Load catalog for article editing
+            const catalog = await api("/api/catalog");
+            const items = o.items || [];
+            EDIT_CART = items.map(it => ({ id: it.id, name: it.name, icon: it.icon || "", price: it.price, qty: it.qty, express: it.express || false }));
+
+            html += `<div style="margin-bottom:12px"><label><input type="checkbox" id="edit-express" ${EDIT_CART.length && EDIT_CART[0].express ? "checked" : ""} onchange="editRecalcExpress()"> Express</label></div>`;
+            html += `<div id="edit-cart-list"></div>`;
+            html += `<details style="margin:12px 0"><summary style="cursor:pointer;font-weight:600">➕ Ajouter un article</summary>`;
+            html += `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-top:8px">`;
+            catalog.filter(c => c.active).forEach(c => {
+                html += `<button class="btn-o btn-sm" style="text-align:left" onclick="editAddItem(${c.id},'${esc(c.name).replace(/'/g,"\\'")}','${esc(c.icon||"").replace(/'/g,"\\'")}',${c.price},${c.price_express||0})">${esc(c.icon||"")} ${esc(c.name)} — ${fmt(c.price)}</button>`;
+            });
+            html += `</div></details>`;
+        } else {
+            html += `<div class="form-group"><label>Poids (kg)</label><input id="edit-weight" type="number" step="0.01" min="0.01" value="${o.weight}" oninput="editRecalcKilo()"></div>`;
+            html += `<div class="form-group"><label>Tarif au kg (FCFA)</label><input id="edit-pkg" type="number" min="1" value="${o.price_kg}" oninput="editRecalcKilo()"></div>`;
+            html += `<div class="form-group"><label>Description du linge</label><textarea id="edit-kitems" rows="2" maxlength="2000">${esc(o.kilo_items || "")}</textarea></div>`;
+        }
+
+        html += `<div class="form-group"><label>Remise (FCFA)</label><input id="edit-discount" type="number" min="0" value="${o.discount || 0}" oninput="editRecalcTotal()"></div>`;
+        html += `<div class="form-group" id="edit-disc-reason-wrap" style="display:${o.discount > 0 ? "" : "none"}"><label>Motif de la remise</label><input id="edit-disc-reason" value="${esc(o.discount_reason || "")}"></div>`;
+        html += `<div class="form-group"><label>Date retrait prévue</label><input id="edit-promise" type="date" value="${esc(o.promise_date || "")}"></div>`;
+
+        if (o.paid_total > 0) {
+            html += `<p style="color:var(--warn);font-size:13px">⚠️ Paiements déjà effectués : <strong>${fmt(o.paid_total)}</strong> — le nouveau total ne peut pas être inférieur.</p>`;
+        }
+
+        html += `<div id="edit-total-display" style="font-size:18px;font-weight:700;margin:12px 0"></div>`;
+        html += `<div class="actions"><button class="btn-o" onclick="closeModal()">Annuler</button>`;
+        html += `<button class="btn btn-ok" id="edit-submit-btn" onclick="submitEditOrder(${orderId})">💾 Enregistrer</button></div>`;
+
+        showModal(html);
+
+        // After modal rendered, update totals
+        if (o.type === "article") {
+            renderEditCart();
+        } else {
+            editRecalcKilo();
+        }
+    } catch (e) {
+        toast(e.message, "err");
+    }
+}
+
+function renderEditCart() {
+    let el = document.getElementById("edit-cart-list");
+    if (!el) return;
+    if (!EDIT_CART.length) {
+        el.innerHTML = '<p style="color:var(--txt2)">Panier vide</p>';
+        editRecalcTotal();
+        return;
+    }
+    let h = '<table><thead><tr><th>Article</th><th>Qté</th><th class="text-right">Prix</th><th></th></tr></thead><tbody>';
+    EDIT_CART.forEach((it, i) => {
+        h += `<tr><td>${esc(it.icon)} ${esc(it.name)}</td>`;
+        h += `<td style="display:flex;align-items:center;gap:4px">`;
+        h += `<button class="btn-o btn-sm" onclick="editCartQty(${i},-1)">−</button>`;
+        h += `<span style="min-width:24px;text-align:center">${it.qty}</span>`;
+        h += `<button class="btn-o btn-sm" onclick="editCartQty(${i},1)">+</button></td>`;
+        h += `<td class="text-right">${fmt(it.price * it.qty)}</td>`;
+        h += `<td><button class="btn-d btn-sm" onclick="editCartRemove(${i})">🗑</button></td></tr>`;
+    });
+    h += '</tbody></table>';
+    el.innerHTML = h;
+    editRecalcTotal();
+}
+
+function editCartQty(idx, delta) {
+    EDIT_CART[idx].qty = Math.max(1, EDIT_CART[idx].qty + delta);
+    renderEditCart();
+}
+
+function editCartRemove(idx) {
+    EDIT_CART.splice(idx, 1);
+    renderEditCart();
+}
+
+function editAddItem(id, name, icon, price, priceExpress) {
+    const isExpress = document.getElementById("edit-express")?.checked || false;
+    const unitPrice = isExpress && priceExpress > 0 ? priceExpress : price;
+    const existing = EDIT_CART.findIndex(it => it.id === id);
+    if (existing >= 0) {
+        EDIT_CART[existing].qty++;
+        EDIT_CART[existing].price = unitPrice;
+    } else {
+        EDIT_CART.push({ id, name, icon, price: unitPrice, qty: 1, express: isExpress });
+    }
+    renderEditCart();
+}
+
+function editRecalcExpress() {
+    // Re-fetch prices — for simplicity, just toggle flag. Full price update would need catalog reload
+    // For now we mark the flag; the server will recalculate based on catalog at save time
+    const isExpress = document.getElementById("edit-express")?.checked || false;
+    EDIT_CART.forEach(it => { it.express = isExpress; });
+    // We'd need to re-lookup prices from catalog. Let's do it via a re-open approach:
+    // Actually the server recalculates prices from catalog on PUT, so we can just keep quantities
+    renderEditCart();
+}
+
+function editRecalcKilo() {
+    const w = parseFloat(document.getElementById("edit-weight")?.value) || 0;
+    const p = parseInt(document.getElementById("edit-pkg")?.value) || 0;
+    editRecalcTotal(Math.round(w * p));
+}
+
+function editRecalcTotal(forcedSubtotal) {
+    let subtotal;
+    if (forcedSubtotal !== undefined) {
+        subtotal = forcedSubtotal;
+    } else {
+        subtotal = EDIT_CART.reduce((s, it) => s + it.price * it.qty, 0);
+    }
+    const disc = parseInt(document.getElementById("edit-discount")?.value) || 0;
+    const total = Math.max(0, subtotal - disc);
+    const el = document.getElementById("edit-total-display");
+    if (el) el.textContent = "Total : " + fmt(total);
+    // Show/hide discount reason
+    const wrap = document.getElementById("edit-disc-reason-wrap");
+    if (wrap) wrap.style.display = disc > 0 ? "" : "none";
+}
+
+async function submitEditOrder(orderId) {
+    const btn = document.getElementById("edit-submit-btn");
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>'; }
+    try {
+        const body = {
+            discount: parseInt(document.getElementById("edit-discount")?.value) || 0,
+            discount_reason: document.getElementById("edit-disc-reason")?.value || "",
+            promise_date: document.getElementById("edit-promise")?.value || ""
+        };
+
+        if (EDIT_ORDER_TYPE === "article") {
+            if (!EDIT_CART.length) { toast("Le panier est vide", "err"); if(btn){btn.disabled=false;btn.textContent="💾 Enregistrer";} return; }
+            body.items = EDIT_CART.map(it => ({ id: it.id, qty: it.qty }));
+            body.express = document.getElementById("edit-express")?.checked || false;
+        } else {
+            body.weight = parseFloat(document.getElementById("edit-weight")?.value) || 0;
+            body.price_kg = parseInt(document.getElementById("edit-pkg")?.value) || 0;
+            body.kilo_items = document.getElementById("edit-kitems")?.value || "";
+        }
+
+        await api(`/api/orders/${orderId}`, {
+            method: "PUT",
+            body: JSON.stringify(body)
+        });
+        closeModal();
+        toast("Commande modifiée", "ok");
+        showOrder(orderId);
+    } catch (e) {
+        toast(e.message, "err");
+        if (btn) { btn.disabled = false; btn.textContent = "💾 Enregistrer"; }
     }
 }
 
