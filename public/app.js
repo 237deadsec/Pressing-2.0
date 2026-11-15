@@ -151,6 +151,11 @@ let PAGES = [{
     label: "Créances",
     roles: ["gerant"]
 }, {
+    id: "subscriptions",
+    icon: "🎫",
+    label: "Abonnements",
+    roles: ["gerant"]
+}, {
     id: "catalog",
     icon: "🏷️",
     label: "Catalogue",
@@ -183,7 +188,7 @@ function buildNav() {
 function nav(e) {
     currentPage = e, $$("page").forEach(t => t.classList.remove("active"));
     var t = $("p-" + e);
-    t && t.classList.add("active"), $$("#nav button").forEach(t => t.classList.toggle("active", t.dataset.page === e)), $("sidebar").classList.remove("open"), $("overlay").classList.remove("open"), "dashboard" === e && loadDashboard(), "orders" === e && (ordersPage = 1, loadOrders()), "clients" === e && loadClients(), "creances" === e && loadCreances(), "catalog" === e && loadCatalogAdmin(), "users" === e && loadUsers(), "settings" === e && loadSettings(), "reports" === e && initReports()
+    t && t.classList.add("active"), $$("#nav button").forEach(t => t.classList.toggle("active", t.dataset.page === e)), $("sidebar").classList.remove("open"), $("overlay").classList.remove("open"), "dashboard" === e && loadDashboard(), "orders" === e && (ordersPage = 1, loadOrders()), "clients" === e && loadClients(), "creances" === e && loadCreances(), "catalog" === e && loadCatalogAdmin(), "subscriptions" === e && loadSubscriptions(), "users" === e && loadUsers(), "settings" === e && loadSettings(), "reports" === e && initReports()
 }
 
 function toggleSidebar() {
@@ -864,6 +869,95 @@ async function saveUser(t) {
     }
 }
 
+
+/* ══════ SECTION 13b : ABONNEMENTS (P2.2) ════════════════════════ */
+
+async function loadSubscriptions() {
+    try {
+        const rows = await api('/api/subscriptions');
+        const tb = $('subs-body');
+        if (!rows.length) { tb.innerHTML = '<tr><td colspan="7" style="text-align:center;opacity:.6">Aucun abonnement</td></tr>'; return; }
+        tb.innerHTML = rows.map(s => {
+            const pct = s.total_articles ? Math.round(s.used_articles / s.total_articles * 100) : 0;
+            const statusColor = s.status === 'actif' ? 'var(--ok)' : s.status === 'épuisé' ? 'var(--warn)' : 'var(--err)';
+            return `<tr>
+              <td><b>${esc(s.client_name)}</b><br><small style="opacity:.6">${esc(s.client_phone||'')}</small></td>
+              <td>${esc(s.plan_name)}</td>
+              <td><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;background:rgba(255,255,255,.1);border-radius:4px;height:8px;min-width:60px"><div style="width:${pct}%;height:100%;border-radius:4px;background:${statusColor}"></div></div><span style="font-size:.8rem">${s.used_articles}/${s.total_articles}</span></div></td>
+              <td class="text-right">${fmt(s.amount_paid)}</td>
+              <td>${s.end_date||'-'}</td>
+              <td><span style="color:${statusColor};font-weight:600;font-size:.85rem">${esc(s.status)}</span></td>
+              <td><button class="btn-sm" onclick="showSubModal(${s.id})">Modifier</button>
+              ${s.status==='actif'?`<button class="btn-sm" style="margin-left:4px" onclick="useSub(${s.id})">Utiliser</button>`:''}</td>
+            </tr>`;
+        }).join('');
+    } catch(e) { console.error('loadSubs', e); }
+}
+
+async function showSubModal(editId) {
+    let sub = null;
+    if (editId) {
+        const all = await api('/api/subscriptions');
+        sub = all.find(s => s.id === editId);
+    }
+    const clientsHtml = CLIENTS_CACHE.length
+        ? CLIENTS_CACHE.map(c => `<option value="${c.id}" ${sub && sub.client_id===c.id?'selected':''}>${esc(c.name)} - ${esc(c.phone)}</option>`).join('')
+        : '<option value="">Chargement...</option>';
+    const defaultEnd = new Date(Date.now()+30*86400000).toISOString().slice(0,10);
+    showModal(`<h3>${sub?'Modifier':'Nouvel'} abonnement</h3>
+      <div class="form-group"><label>Client</label><select id="sub-client" ${sub?'disabled':''}><option value="">-- Sélectionner --</option>${clientsHtml}</select></div>
+      <div class="form-group"><label>Formule</label><input id="sub-plan" placeholder="Ex: Forfait 20 articles" value="${esc(sub?.plan_name||'')}"></div>
+      <div class="grid2">
+        <div class="form-group"><label>Nb articles</label><input id="sub-total" type="number" min="1" value="${sub?.total_articles||20}"></div>
+        <div class="form-group"><label>Montant payé</label><input id="sub-paid" type="number" min="0" value="${sub?.amount_paid||0}"></div>
+      </div>
+      <div class="form-group"><label>Date fin</label><input id="sub-end" type="date" value="${sub?.end_date||defaultEnd}"></div>
+      ${sub?`<div class="form-group"><label>Statut</label><select id="sub-status">
+        ${['actif','expiré','épuisé','annulé'].map(s=>`<option value="${s}" ${sub.status===s?'selected':''}>${s}</option>`).join('')}</select></div>`:''}
+      <div class="form-group"><label>Notes</label><textarea id="sub-notes" rows="2">${esc(sub?.notes||'')}</textarea></div>
+      <button class="btn" onclick="saveSub(${editId||0})" style="width:100%;margin-top:8px">${sub?'Enregistrer':'Créer'}</button>`);
+    if (!CLIENTS_CACHE.length) {
+        const cls = await api('/api/clients?limit=500');
+        CLIENTS_CACHE = cls.clients || cls;
+        $('sub-client').innerHTML = '<option value="">-- Sélectionner --</option>' + CLIENTS_CACHE.map(c => `<option value="${c.id}">${esc(c.name)} - ${esc(c.phone)}</option>`).join('');
+    }
+}
+
+var CLIENTS_CACHE = [];
+
+async function saveSub(editId) {
+    const data = {
+        client_id: +$('sub-client')?.value,
+        plan_name: $('sub-plan').value,
+        total_articles: +$('sub-total').value,
+        amount_paid: +$('sub-paid').value,
+        end_date: $('sub-end').value,
+        notes: $('sub-notes').value
+    };
+    if (!editId && !data.client_id) return alert('Sélectionnez un client');
+    if (!data.plan_name) return alert('Nom de formule requis');
+    if (data.total_articles < 1) return alert('Nombre d\'articles invalide');
+    try {
+        if (editId) {
+            const statusEl = $('sub-status');
+            if (statusEl) data.status = statusEl.value;
+            await api('/api/subscriptions/' + editId, 'PUT', data);
+        } else {
+            await api('/api/subscriptions', 'POST', data);
+        }
+        closeModal();
+        loadSubscriptions();
+    } catch(e) { alert(e.message || 'Erreur'); }
+}
+
+async function useSub(id) {
+    const qty = prompt('Nombre d\'articles à déduire :', '1');
+    if (!qty || +qty < 1) return;
+    try {
+        await api('/api/subscriptions/' + id + '/use', 'POST', { quantity: +qty });
+        loadSubscriptions();
+    } catch(e) { alert(e.message || 'Erreur'); }
+}
 
 /* ══════ SECTION 14 : RAPPORTS ═══════════════════════════════════ */
 

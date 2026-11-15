@@ -111,6 +111,17 @@ async function initDB() {
   // P2.1 — catalog categories
   try { await q("ALTER TABLE catalog ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'Divers'"); } catch(e) {}
 
+  // P2.2 — subscriptions
+  try { await q(`CREATE TABLE IF NOT EXISTS subscriptions(
+    id SERIAL PRIMARY KEY, client_id INTEGER NOT NULL REFERENCES clients(id),
+    plan_name TEXT NOT NULL, total_articles INTEGER NOT NULL CHECK(total_articles > 0),
+    used_articles INTEGER NOT NULL DEFAULT 0, amount_paid INTEGER NOT NULL DEFAULT 0,
+    start_date TEXT NOT NULL, end_date TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'actif' CHECK(status IN ('actif','expiré','épuisé','annulé')),
+    created_at TEXT NOT NULL, created_by TEXT NOT NULL, notes TEXT DEFAULT ''
+  )`); } catch(e) {}
+  try { await q("CREATE INDEX IF NOT EXISTS ix_subs_client ON subscriptions(client_id)"); } catch(e) {}
+
   // Données initiales
   const hasUsers = await q1('SELECT 1 FROM users LIMIT 1');
   if (!hasUsers) {
@@ -693,6 +704,57 @@ app.get('/api/creances', auth('superviseur', 'gerant'), async (req, res) => {
     GROUP BY c.id ORDER BY due DESC`);
   const total_due = rows.reduce((s,r) => s + r.due, 0);
   res.json({ clients: rows, total_due, count: rows.length });
+});
+
+/* ══════════════════════════════════════════════════════════════════
+   12b. ABONNEMENTS (P2.2)
+   ══════════════════════════════════════════════════════════════════ */
+app.get('/api/subscriptions', auth('superviseur', 'gerant'), async (req, res) => {
+  const rows = await qAll(`SELECT s.*, c.name AS client_name, c.phone AS client_phone
+    FROM subscriptions s JOIN clients c ON c.id=s.client_id ORDER BY s.id DESC`);
+  res.json(rows);
+});
+
+app.post('/api/subscriptions', auth('superviseur', 'gerant'), async (req, res) => {
+  const { client_id, plan_name, total_articles, amount_paid, end_date, notes } = req.body;
+  if (!client_id || !plan_name || !total_articles || total_articles < 1) return res.status(400).json({ error: 'Champs requis manquants' });
+  const client = await q1('SELECT id FROM clients WHERE id=$1', [+client_id]);
+  if (!client) return res.status(404).json({ error: 'Client introuvable' });
+  const now = new Date().toISOString();
+  const start = localDate();
+  const end = end_date || new Date(Date.now() + 30*86400000).toISOString().slice(0, 10);
+  const row = await q1(`INSERT INTO subscriptions(client_id, plan_name, total_articles, amount_paid, start_date, end_date, created_at, created_by, notes)
+    VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+    [+client_id, String(plan_name).trim().slice(0,100), +total_articles, +(amount_paid||0), start, end, now, req.user.name, String(notes||'').slice(0,500)]);
+  res.status(201).json(row);
+});
+
+app.put('/api/subscriptions/:id', auth('superviseur', 'gerant'), async (req, res) => {
+  const sub = await q1('SELECT * FROM subscriptions WHERE id=$1', [+req.params.id]);
+  if (!sub) return res.status(404).json({ error: 'Abonnement introuvable' });
+  const { plan_name, total_articles, amount_paid, end_date, status, notes } = req.body;
+  const validStatuses = ['actif', 'expiré', 'épuisé', 'annulé'];
+  const newStatus = validStatuses.includes(status) ? status : sub.status;
+  const row = await q1(`UPDATE subscriptions SET plan_name=$1, total_articles=$2, amount_paid=$3, end_date=$4, status=$5, notes=$6 WHERE id=$7 RETURNING *`,
+    [String(plan_name||sub.plan_name).trim().slice(0,100), +(total_articles||sub.total_articles), +(amount_paid||sub.amount_paid), end_date||sub.end_date, newStatus, String(notes??sub.notes).slice(0,500), +req.params.id]);
+  res.json(row);
+});
+
+app.post('/api/subscriptions/:id/use', auth(), async (req, res) => {
+  const sub = await q1('SELECT * FROM subscriptions WHERE id=$1', [+req.params.id]);
+  if (!sub) return res.status(404).json({ error: 'Abonnement introuvable' });
+  if (sub.status !== 'actif') return res.status(400).json({ error: 'Abonnement non actif' });
+  const qty = Math.max(1, +(req.body.quantity || 1));
+  if (sub.used_articles + qty > sub.total_articles) return res.status(400).json({ error: 'Crédit insuffisant' });
+  const newUsed = sub.used_articles + qty;
+  const newStatus = newUsed >= sub.total_articles ? 'épuisé' : 'actif';
+  const row = await q1('UPDATE subscriptions SET used_articles=$1, status=$2 WHERE id=$3 RETURNING *', [newUsed, newStatus, +req.params.id]);
+  res.json(row);
+});
+
+app.get('/api/clients/:id/subscriptions', auth(), async (req, res) => {
+  const rows = await qAll('SELECT * FROM subscriptions WHERE client_id=$1 ORDER BY id DESC', [+req.params.id]);
+  res.json(rows);
 });
 
 /* ══════════════════════════════════════════════════════════════════
