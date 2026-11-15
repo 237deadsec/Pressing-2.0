@@ -454,6 +454,8 @@ tr:hover td{background:rgba(255,255,255,.04)}
         <div class="search-bar">
           <input id="rp-from" type="date"> <span style="padding:8px">→</span> <input id="rp-to" type="date">
           <button class="btn btn-sm" onclick="loadReports()">Générer</button>
+          <button class="btn btn-sm" onclick="exportReportCSV()" style="margin-left:8px">&#128229; CSV</button>
+          <button class="btn btn-sm" onclick="printReport()" style="margin-left:4px">&#128424; Imprimer</button>
         </div>
         <div id="report-content"></div>
       </div>

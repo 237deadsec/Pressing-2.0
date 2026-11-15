@@ -970,6 +970,7 @@ function initReports() {
 async function loadReports() {
     try {
         var t = await api(`/api/reports?from=${$("rp-from").value}&to=` + $("rp-to").value);
+        lastReport = t;
         let a = `<div class="grid3 mt-16">\n      <div class="stat-card"><div class="val">${fmt(t.ca)}</div><div class="lbl">CA total</div></div>\n      <div class="stat-card"><div class="val">${t.n}</div><div class="lbl">Commandes</div></div>\n      <div class="stat-card"><div class="val">${fmt(t.avg)}</div><div class="lbl">Panier moyen</div></div>\n      <div class="stat-card"><div class="val">${fmt(t.encaissements)}</div><div class="lbl">Encaissements</div></div>\n      <div class="stat-card"><div class="val">${fmt(t.discounts)}</div><div class="lbl">Remises</div></div>\n      <div class="stat-card"><div class="val">${t.cancelled?.n||0}</div><div class="lbl">Annulées (${fmt(t.cancelled?.v||0)})</div></div>\n    </div>`;
         t.kg && (a += `<p class="mt-8">Kilo : ${t.kg} kg — ${fmt(t.caKilo)}</p>`), a += '<h3 class="mt-16">Par mode de paiement</h3><div class="grid3">', Object.entries(t.byPay || {}).forEach(([t, e]) => {
             a += `<div class="stat-card"><div class="val">${fmt(e)}</div><div class="lbl">${esc(t)}</div></div>`
@@ -983,6 +984,59 @@ async function loadReports() {
     }
 }
 
+
+/* ══════ SECTION 14b : EXPORT RAPPORTS (P2.3) ════════════════════ */
+
+var lastReport = null;
+
+function exportReportCSV() {
+    if (!lastReport) return toast('Générez d\'abord un rapport', 'err');
+    const r = lastReport;
+    let csv = 'Rapport du ' + $('rp-from').value + ' au ' + $('rp-to').value + '\n\n';
+    csv += 'Indicateur,Valeur\n';
+    csv += `CA total,${r.ca}\nCommandes,${r.n}\nPanier moyen,${r.avg}\nEncaissements,${r.encaissements}\nRemises,${r.discounts}\nAnnulées,${r.cancelled?.n||0}\n`;
+    if (r.kg) csv += `Poids total (kg),${r.kg}\nCA Kilo,${r.caKilo}\n`;
+    csv += '\nMode de paiement,Montant\n';
+    Object.entries(r.byPay||{}).forEach(([k,v]) => csv += `${k},${v}\n`);
+    if (r.top?.length) {
+        csv += '\nTop articles\nArticle,Quantité,CA\n';
+        r.top.forEach(t => csv += `"${t.name}",${t.qty},${t.ca}\n`);
+    }
+    if (r.credits?.length) {
+        csv += '\nCréances en cours\nCode,Client,Total,Payé,Dû\n';
+        r.credits.forEach(c => csv += `${c.code},"${c.client_name}",${c.total},${c.paid_total},${c.balance}\n`);
+    }
+    const blob = new Blob(['﻿'+csv], {type:'text/csv;charset=utf-8'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `rapport_${$('rp-from').value}_${$('rp-to').value}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    toast('CSV téléchargé', 'ok');
+}
+
+function printReport() {
+    if (!lastReport) return toast('Générez d\'abord un rapport', 'err');
+    const content = $('report-content').innerHTML;
+    const title = (S.shop_name||'PressingPro') + ' — Rapport du ' + $('rp-from').value + ' au ' + $('rp-to').value;
+    const w = window.open('', '_blank');
+    w.document.write(`<!DOCTYPE html><html><head><title>${title}</title>
+    <style>body{font-family:system-ui,sans-serif;padding:20px;color:#222}
+    h1{font-size:1.2rem;margin-bottom:16px}
+    table{border-collapse:collapse;width:100%;margin:12px 0}
+    th,td{border:1px solid #ccc;padding:6px 10px;text-align:left;font-size:.9rem}
+    th{background:#f5f5f5;font-weight:600}
+    .text-right{text-align:right}
+    .stat-card{display:inline-block;text-align:center;border:1px solid #ddd;border-radius:8px;padding:12px 20px;margin:4px}
+    .stat-card .val{font-size:1.2rem;font-weight:700}
+    .stat-card .lbl{font-size:.8rem;opacity:.6}
+    .grid3{display:flex;flex-wrap:wrap;gap:8px}
+    .mt-8{margin-top:8px}.mt-16{margin-top:16px}
+    @media print{body{padding:0}}</style></head>
+    <body><h1>${title}</h1>${content}</body></html>`);
+    w.document.close();
+    w.print();
+}
 
 /* ══════ SECTION 15 : MODAL & ÉCOUTEURS GLOBAUX ══════════════════ */
 
