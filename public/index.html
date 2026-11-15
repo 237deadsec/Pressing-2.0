@@ -370,9 +370,26 @@ tr:hover td{background:rgba(255,255,255,.04)}
 
     <!-- CLIENTS -->
     <div class="page" id="p-clients">
-      <div class="card">
-        <h2>&#128101; Clients</h2>
-        <div style="overflow-x:auto"><table><thead><tr><th>Nom</th><th>Téléphone</th><th>Commandes</th><th>CA</th><th>Dû</th></tr></thead><tbody id="clients-body"></tbody></table></div>
+      <!-- Liste clients -->
+      <div class="card" id="clients-list-card">
+        <div class="flex justify-between items-center mb-8">
+          <h2>&#128101; Clients</h2>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input id="clients-search-input" placeholder="Rechercher..." style="width:200px" oninput="filterClientsTable()">
+            <label style="font-size:.85rem;display:flex;align-items:center;gap:4px;cursor:pointer">
+              <input type="checkbox" id="clients-due-only" onchange="filterClientsTable()"> Créances
+            </label>
+          </div>
+        </div>
+        <div style="overflow-x:auto"><table><thead><tr><th>Nom</th><th>Téléphone</th><th>Commandes</th><th class="text-right">CA</th><th class="text-right">Dû</th><th>Actions</th></tr></thead><tbody id="clients-body"></tbody></table></div>
+      </div>
+      <!-- Détail client -->
+      <div class="card" id="client-detail-card" style="display:none">
+        <div class="flex justify-between items-center mb-8">
+          <h2 id="client-detail-title">Fiche client</h2>
+          <button class="btn-o btn-sm" onclick="backToClientsList()">← Retour</button>
+        </div>
+        <div id="client-detail-content"></div>
       </div>
     </div>
 

@@ -464,13 +464,131 @@ async function printOrder(t, e) {
 
 
 /* ══════ SECTION 10 : CLIENTS ════════════════════════════════════ */
+var CLIENTS_LIST = [];
 
 async function loadClients() {
     try {
-        var t = await api("/api/clients");
-        $("clients-body").innerHTML = t.map(t => `<tr>\n      <td>${esc(t.name)}</td><td>${esc(t.phone||"—")}</td><td>${t.n}</td><td class="text-right">${fmt(t.ca)}</td>\n      <td class="text-right" style="color:${0<t.due?"var(--err)":"var(--ok)"}">${0<t.due?fmt(t.due):"—"}</td>\n    </tr>`).join("") || '<tr><td colspan="5" class="text-center">Aucun client</td></tr>'
+        CLIENTS_LIST = await api("/api/clients");
+        renderClientsTable();
+        $("clients-list-card").style.display = "";
+        $("client-detail-card").style.display = "none";
     } catch (t) {
         toast(t.message, "err")
+    }
+}
+
+function renderClientsTable() {
+    var search = ($("clients-search-input").value || "").toLowerCase();
+    var dueOnly = $("clients-due-only").checked;
+    var filtered = CLIENTS_LIST.filter(function(c) {
+        if (dueOnly && c.due <= 0) return false;
+        if (search && !(c.name||"").toLowerCase().includes(search) && !(c.phone||"").toLowerCase().includes(search)) return false;
+        return true;
+    });
+    $("clients-body").innerHTML = filtered.map(function(t, idx) {
+        return '<tr style="cursor:pointer" onclick="showClientDetail(' + t.id + ')">' +
+            '<td>' + esc(t.name) + '</td>' +
+            '<td>' + esc(t.phone || "—") + '</td>' +
+            '<td>' + t.n + '</td>' +
+            '<td class="text-right">' + fmt(t.ca) + '</td>' +
+            '<td class="text-right" style="color:' + (t.due > 0 ? "var(--err)" : "var(--ok)") + '">' + (t.due > 0 ? fmt(t.due) : "—") + '</td>' +
+            '<td><button class="btn-o btn-sm" onclick="event.stopPropagation();editClientModal(' + t.id + ')">✏️</button></td>' +
+            '</tr>';
+    }).join("") || '<tr><td colspan="6" class="text-center">Aucun client</td></tr>';
+}
+
+function filterClientsTable() { renderClientsTable(); }
+
+function backToClientsList() {
+    $("clients-list-card").style.display = "";
+    $("client-detail-card").style.display = "none";
+}
+
+async function showClientDetail(id) {
+    try {
+        var c = await api("/api/clients/" + id);
+        $("clients-list-card").style.display = "none";
+        $("client-detail-card").style.display = "";
+        $("client-detail-title").textContent = "📋 " + c.name;
+
+        var statsHtml = '<div class="stat-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px">' +
+            '<div class="stat-card"><div class="stat-val">' + c.total_orders + '</div><div class="stat-label">Commandes</div></div>' +
+            '<div class="stat-card"><div class="stat-val">' + fmt(c.ca) + '</div><div class="stat-label">CA total</div></div>' +
+            '<div class="stat-card"><div class="stat-val" style="color:' + (c.due > 0 ? "var(--err)" : "var(--ok)") + '">' + fmt(c.due) + '</div><div class="stat-label">Créances</div></div>' +
+            '</div>';
+
+        var infoHtml = '<div class="card" style="margin-bottom:16px;padding:12px">' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:.9rem">' +
+            '<div><strong>Téléphone :</strong> ' + esc(c.phone || "—") + '</div>' +
+            '<div><strong>Email :</strong> ' + esc(c.email || "—") + '</div>' +
+            '<div><strong>Adresse :</strong> ' + esc(c.address || "—") + '</div>' +
+            '<div><strong>Notes :</strong> ' + esc(c.notes || "—") + '</div>' +
+            '</div>' +
+            '<div style="margin-top:10px"><button class="btn btn-sm" onclick="editClientModal(' + c.id + ')">✏️ Modifier</button></div>' +
+            '</div>';
+
+        var ordersHtml = '<h3 style="margin:16px 0 8px">Historique des commandes</h3>';
+        if (c.orders && c.orders.length > 0) {
+            ordersHtml += '<div style="overflow-x:auto"><table><thead><tr><th>Code</th><th>Date</th><th>Type</th><th>Statut</th><th class="text-right">Total</th><th class="text-right">Payé</th><th class="text-right">Solde</th></tr></thead><tbody>';
+            ordersHtml += c.orders.map(function(o) {
+                var statusClass = o.status === 'livre' ? 'badge-ok' : o.status === 'annule' ? 'badge-err' : o.status === 'pret' ? 'badge-warn' : 'badge-info';
+                var statusLabel = o.status === 'depose' ? 'Déposé' : o.status === 'traitement' ? 'Traitement' : o.status === 'pret' ? 'Prêt' : o.status === 'livre' ? 'Livré' : 'Annulé';
+                return '<tr style="cursor:pointer" onclick="showOrder(' + o.id + ')">' +
+                    '<td>' + esc(o.code) + '</td>' +
+                    '<td>' + esc(o.day) + '</td>' +
+                    '<td>' + esc(o.type) + '</td>' +
+                    '<td><span class="badge ' + statusClass + '">' + statusLabel + '</span></td>' +
+                    '<td class="text-right">' + fmt(o.total) + '</td>' +
+                    '<td class="text-right">' + fmt(o.paid) + '</td>' +
+                    '<td class="text-right" style="color:' + (o.balance > 0 ? "var(--err)" : "var(--ok)") + '">' + (o.balance > 0 ? fmt(o.balance) : "—") + '</td>' +
+                    '</tr>';
+            }).join("");
+            ordersHtml += '</tbody></table></div>';
+        } else {
+            ordersHtml += '<p style="color:var(--muted);text-align:center;padding:20px">Aucune commande</p>';
+        }
+
+        $("client-detail-content").innerHTML = statsHtml + infoHtml + ordersHtml;
+    } catch (t) {
+        toast(t.message, "err")
+    }
+}
+
+async function editClientModal(id) {
+    try {
+        var c = await api("/api/clients/" + id);
+        showModal(
+            '<h3>Modifier le client</h3>' +
+            '<div class="form-group"><label>Nom *</label><input id="edit-cl-name" value="' + esc(c.name) + '"></div>' +
+            '<div class="form-group"><label>Téléphone</label><input id="edit-cl-phone" value="' + esc(c.phone || "") + '"></div>' +
+            '<div class="form-group"><label>Email</label><input id="edit-cl-email" type="email" value="' + esc(c.email || "") + '"></div>' +
+            '<div class="form-group"><label>Adresse</label><input id="edit-cl-address" value="' + esc(c.address || "") + '"></div>' +
+            '<div class="form-group"><label>Notes</label><textarea id="edit-cl-notes" rows="3" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--glass);color:var(--text)">' + esc(c.notes || "") + '</textarea></div>' +
+            '<div class="actions"><button class="btn-o" onclick="closeModal()">Annuler</button>' +
+            '<button class="btn" onclick="saveClient(' + id + ')">Enregistrer</button></div>'
+        );
+    } catch(t) {
+        toast(t.message, "err");
+    }
+}
+
+async function saveClient(id) {
+    var data = {
+        name: $("edit-cl-name").value,
+        phone: $("edit-cl-phone").value,
+        email: $("edit-cl-email").value,
+        address: $("edit-cl-address").value,
+        notes: $("edit-cl-notes").value
+    };
+    if (!data.name.trim()) return toast("Le nom est requis", "err");
+    try {
+        await api("/api/clients/" + id, { method: "PUT", body: JSON.stringify(data) });
+        closeModal();
+        toast("Client modifié", "ok");
+        loadClients();
+        showClientDetail(id);
+    } catch(t) {
+        toast(t.message, "err");
     }
 }
 
