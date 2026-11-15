@@ -898,7 +898,9 @@ async function loadCatalogAdmin() {
         $("catalog-body").innerHTML = CAT.map(t => `<tr>
       <td style="font-size:1.3rem">${esc(t.icon)}</td><td>${esc(t.name)}</td>
       <td>${esc(t.category||'Divers')}</td><td class="text-right">${fmt(t.price)}</td>
+      <td class="text-right">${fmt(t.price_express||0)}</td>
       <td><button class="btn-o btn-sm" onclick="editCatalogItem(${t.id})">&#9999;&#65039;</button>
+      <button class="btn-o btn-sm" onclick="showPriceHistory(${t.id})" title="Historique prix">&#128200;</button>
       <button class="btn-sm" style="background:none;color:var(--err)" onclick="deleteCatalogItem(${t.id})">&#128465;&#65039;</button></td>
     </tr>`).join("")
     } catch (t) {
@@ -906,16 +908,17 @@ async function loadCatalogAdmin() {
     }
 }
 
-function showCatalogModal(t, e, a, s, cat) {
+function showCatalogModal(t, e, a, s, cat, pe) {
     const cats = [...new Set(CAT.map(c => c.category || 'Divers'))].sort();
     const catOptions = cats.map(c => `<option value="${esc(c)}" ${c===(cat||'Divers')?'selected':''}>${esc(c)}</option>`).join('');
     showModal(`<h3>${t?"Modifier":"Ajouter"} un article</h3>
     <div class="form-group"><label>Nom</label><input id="cat-name" value="${esc(e||"")}"></div>
-    <div class="grid2"><div class="form-group"><label>Prix (FCFA)</label><input id="cat-price" type="number" value="${a||""}"></div>
-    <div class="form-group"><label>Ic&#244;ne</label><input id="cat-icon" value="${esc(s||"🧺")}" maxlength="4"></div></div>
+    <div class="grid2"><div class="form-group"><label>Prix normal (FCFA)</label><input id="cat-price" type="number" value="${a||""}"></div>
+    <div class="form-group"><label>Prix express (FCFA)</label><input id="cat-price-express" type="number" value="${pe||0}"></div></div>
+    <div class="grid2"><div class="form-group"><label>Ic&#244;ne</label><input id="cat-icon" value="${esc(s||"🧺")}" maxlength="4"></div>
     <div class="form-group"><label>Cat&#233;gorie</label>
       <div style="display:flex;gap:8px"><select id="cat-category" style="flex:1">${catOptions}<option value="__new">+ Nouvelle...</option></select>
-      <input id="cat-category-new" placeholder="Nouvelle cat&#233;gorie" style="flex:1;display:none"></div></div>
+      <input id="cat-category-new" placeholder="Nouvelle cat&#233;gorie" style="flex:1;display:none"></div></div></div>
     <div class="actions"><button class="btn-o" onclick="closeModal()">Annuler</button>
     <button class="btn" onclick="saveCatalogItem(${t||0})">Enregistrer</button></div>`);
     $('cat-category').onchange = function() {
@@ -925,7 +928,7 @@ function showCatalogModal(t, e, a, s, cat) {
 
 function editCatalogItem(id) {
     var t = CAT.find(c => c.id === id);
-    if(t) showCatalogModal(t.id, t.name, t.price, t.icon, t.category)
+    if(t) showCatalogModal(t.id, t.name, t.price, t.icon, t.category, t.price_express || 0)
 }
 
 async function saveCatalogItem(t) {
@@ -933,6 +936,7 @@ async function saveCatalogItem(t) {
     var e = {
         name: $("cat-name").value,
         price: parseInt($("cat-price").value),
+        price_express: parseInt($("cat-price-express").value) || 0,
         icon: $("cat-icon").value,
         category: selCat === '__new' ? ($("cat-category-new").value.trim() || 'Divers') : selCat
     };
@@ -963,6 +967,43 @@ async function deleteCatalogItem(t) {
     }
 }
 
+
+// P3.1 — Price history display
+async function showPriceHistory(id) {
+    var item = CAT.find(c => c.id === id);
+    var name = item ? esc(item.name) : 'Article #' + id;
+    try {
+        var rows = await api("/api/catalog/" + id + "/price-history");
+        var html = '<h3>📊 Historique des prix — ' + name + '</h3>';
+        if (!rows.length) {
+            html += '<p style="text-align:center;opacity:.6;padding:20px 0">Aucun changement de prix enregistré</p>';
+        } else {
+            html += '<table class="table" style="font-size:.85rem"><thead><tr><th>Date</th><th>Ancien prix</th><th>Nouveau prix</th><th>Modifié par</th></tr></thead><tbody>';
+            rows.forEach(function(r) {
+                var d = new Date(r.changed_at);
+                var dateStr = d.toLocaleDateString('fr-FR') + ' ' + d.toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'});
+                var oldP = fmt(r.old_price);
+                var newP = fmt(r.new_price);
+                var diff = r.new_price - r.old_price;
+                var diffClass = diff > 0 ? 'color:var(--err)' : 'color:var(--ok)';
+                var diffStr = diff > 0 ? '+' + fmt(diff) : fmt(diff);
+                html += '<tr><td>' + esc(dateStr) + '</td><td class="text-right">' + oldP + '</td><td class="text-right">' + newP + ' <small style="' + diffClass + '">(' + diffStr + ')</small></td><td>' + esc(r.changed_by_name || '—') + '</td></tr>';
+                // Show express price change if different
+                if (r.old_price_express !== r.new_price_express) {
+                    var diffE = r.new_price_express - r.old_price_express;
+                    var diffEClass = diffE > 0 ? 'color:var(--err)' : 'color:var(--ok)';
+                    var diffEStr = diffE > 0 ? '+' + fmt(diffE) : fmt(diffE);
+                    html += '<tr style="opacity:.7"><td><small>↳ Express</small></td><td class="text-right"><small>' + fmt(r.old_price_express) + '</small></td><td class="text-right"><small>' + fmt(r.new_price_express) + ' <span style="' + diffEClass + '">(' + diffEStr + ')</span></small></td><td></td></tr>';
+                }
+            });
+            html += '</tbody></table>';
+        }
+        html += '<div class="actions" style="margin-top:12px"><button class="btn-o" onclick="closeModal()">Fermer</button></div>';
+        showModal(html);
+    } catch(e) {
+        toast(e.message, "err");
+    }
+}
 
 /* ══════ SECTION 12 : PARAMÈTRES ═════════════════════════════════ */
 
