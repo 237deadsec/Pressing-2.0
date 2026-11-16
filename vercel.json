@@ -7,7 +7,11 @@
   "routes": [
     { "src": "/api/(.*)", "dest": "server.js" },
     { "src": "/suivi/(.*)", "dest": "public/suivi.html" },
-    { "src": "/(.*\\.(js|css|ico|png|svg|jpg|jpeg|gif|woff2?))", "dest": "public/$1" },
+    { "src": "/sw\\.js", "dest": "public/sw.js", "headers": { "Cache-Control": "no-cache", "Service-Worker-Allowed": "/" } },
+    { "src": "/manifest\\.json", "dest": "public/manifest.json" },
+    { "src": "/offline\\.html", "dest": "public/offline.html" },
+    { "src": "/icons/(.*)", "dest": "public/icons/$1" },
+    { "src": "/(.*\\.(js|css|ico|png|svg|jpg|jpeg|gif|woff2?|json|webmanifest))", "dest": "public/$1" },
     { "src": "/(.*)", "dest": "public/index.html" }
   ]
 }
