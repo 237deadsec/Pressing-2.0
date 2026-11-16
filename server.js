@@ -34,6 +34,63 @@ const pad = n => String(n).padStart(2, '0');
 const localDate = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 const fail = (res, m, c = 400) => res.status(c).json({ error: m });
 
+/* ── P3.2 — Permissions fines par module ── */
+const DEFAULT_PERMISSIONS = {
+  caissier: {
+    'orders.create': true, 'orders.view': true, 'orders.edit': false,
+    'orders.cancel': false, 'orders.status': true,
+    'payments.create': true, 'payments.view': true,
+    'clients.view': true, 'clients.create': false, 'clients.edit': false,
+    'catalog.view': true, 'catalog.manage': false,
+    'subscriptions.view': false, 'subscriptions.manage': false, 'subscriptions.use': true,
+    'stats.view': false, 'reports.view': false, 'reports.export': false,
+    'creances.view': false, 'settings.manage': false,
+    'users.manage': false, 'activity.view': false, 'backup.create': false
+  },
+  superviseur: {
+    'orders.create': true, 'orders.view': true, 'orders.edit': true,
+    'orders.cancel': true, 'orders.status': true,
+    'payments.create': true, 'payments.view': true,
+    'clients.view': true, 'clients.create': true, 'clients.edit': true,
+    'catalog.view': true, 'catalog.manage': false,
+    'subscriptions.view': true, 'subscriptions.manage': true, 'subscriptions.use': true,
+    'stats.view': true, 'reports.view': false, 'reports.export': false,
+    'creances.view': true, 'settings.manage': false,
+    'users.manage': false, 'activity.view': false, 'backup.create': false
+  },
+  gerant: {
+    'orders.create': true, 'orders.view': true, 'orders.edit': true,
+    'orders.cancel': true, 'orders.status': true,
+    'payments.create': true, 'payments.view': true,
+    'clients.view': true, 'clients.create': true, 'clients.edit': true,
+    'catalog.view': true, 'catalog.manage': true,
+    'subscriptions.view': true, 'subscriptions.manage': true, 'subscriptions.use': true,
+    'stats.view': true, 'reports.view': true, 'reports.export': true,
+    'creances.view': true, 'settings.manage': true,
+    'users.manage': true, 'activity.view': true, 'backup.create': true
+  }
+};
+
+// In-memory permissions — merged from DB on startup
+let PERMISSIONS = JSON.parse(JSON.stringify(DEFAULT_PERMISSIONS));
+
+async function loadPermissions() {
+  const row = await q1("SELECT value FROM settings WHERE key='permissions'");
+  if (row && row.value) {
+    try {
+      const custom = JSON.parse(row.value);
+      // Merge custom over defaults: keep any new permission keys from defaults
+      for (const role of ROLES) {
+        PERMISSIONS[role] = { ...DEFAULT_PERMISSIONS[role], ...(custom[role] || {}) };
+      }
+    } catch (e) { console.error('Invalid permissions JSON in settings:', e.message); }
+  }
+}
+
+function hasPermission(role, perm) {
+  return !!(PERMISSIONS[role] && PERMISSIONS[role][perm]);
+}
+
 /* ══════════════════════════════════════════════════════════════════
    2. DATABASE
    ══════════════════════════════════════════════════════════════════ */
@@ -270,20 +327,32 @@ app.set('trust proxy', ['loopback', 'linklocal', 'uniquelocal']);
 let _dbReady = false, _dbInitP = null;
 app.use('/api', async (req, res, next) => {
   if (_dbReady) return next();
-  if (!_dbInitP) _dbInitP = initDB().then(() => { _dbReady = true; console.log('DB init OK'); }).catch(e => { _dbInitP = null; console.error('DB init FAIL:', e.message); throw e; });
+  if (!_dbInitP) _dbInitP = initDB().then(() => loadPermissions()).then(() => { _dbReady = true; console.log('DB init OK'); }).catch(e => { _dbInitP = null; console.error('DB init FAIL:', e.message); throw e; });
   try { await _dbInitP; } catch (e) { return res.status(503).json({ error: 'Base de données indisponible: ' + e.message }); }
   next();
 });
 
 /* ── Auth middleware ── */
-const auth = (...roles) => async (req, res, next) => {
+const auth = (...rolesOrPerms) => async (req, res, next) => {
   const c = {};
   (req.headers.cookie || '').split(';').forEach(x => { const i = x.indexOf('='); if (i > 0) c[x.slice(0, i).trim()] = x.slice(i + 1).trim(); });
   const d = readToken(c.pp_session);
   if (!d) return fail(res, 'Non authentifié', 401);
   const u = await q1('SELECT id,username,name,role,must_change FROM users WHERE id=$1 AND active=true', [d.id]);
   if (!u) return fail(res, 'Non authentifié', 401);
-  if (roles.length && !roles.includes(u.role)) return fail(res, 'Accès refusé', 403);
+  // P3.2 — Support both role names and permission keys (contain a dot)
+  if (rolesOrPerms.length) {
+    const perms = rolesOrPerms.filter(x => x.includes('.'));
+    const roles = rolesOrPerms.filter(x => !x.includes('.'));
+    if (perms.length) {
+      // Permission-based check: user must have at least one of the listed permissions
+      const ok = perms.some(p => hasPermission(u.role, p));
+      if (!ok) return fail(res, 'Accès refusé', 403);
+    } else if (roles.length) {
+      // Legacy role-based check
+      if (!roles.includes(u.role)) return fail(res, 'Accès refusé', 403);
+    }
+  }
   req.user = u;
   next();
 };
@@ -330,9 +399,11 @@ app.post('/api/logout', (req, res) => {
 });
 
 app.get('/api/bootstrap', auth(), async (req, res) => {
+  const perms = PERMISSIONS[req.user.role] || {};
   res.json({
     user: pub(req.user), settings: await publicSettings(),
-    catalog: await qAll('SELECT id,name,price,price_express,icon,category FROM catalog WHERE active=true ORDER BY category,name')
+    catalog: await qAll('SELECT id,name,price,price_express,icon,category FROM catalog WHERE active=true ORDER BY category,name'),
+    permissions: perms
   });
 });
 
@@ -353,7 +424,7 @@ app.post('/api/password', auth(), async (req, res) => {
 app.get('/api/catalog', auth(), async (req, res) =>
   res.json(await qAll('SELECT id,name,price,price_express,icon,category FROM catalog WHERE active=true ORDER BY category,name')));
 
-app.post('/api/catalog', auth('gerant'), async (req, res) => {
+app.post('/api/catalog', auth('catalog.manage'), async (req, res) => {
   const name = String(req.body?.name || '').trim(), price = Math.round(+req.body?.price);
   const price_express = Math.round(+req.body?.price_express || 0);
   const icon = String(req.body?.icon || '🧺').trim().slice(0, 4) || '🧺';
@@ -364,7 +435,7 @@ app.post('/api/catalog', auth('gerant'), async (req, res) => {
   res.json({ ok: true });
 });
 
-app.put('/api/catalog/:id', auth('gerant'), async (req, res) => {
+app.put('/api/catalog/:id', auth('catalog.manage'), async (req, res) => {
   const name = String(req.body?.name || '').trim(), price = Math.round(+req.body?.price);
   const price_express = Math.round(+req.body?.price_express || 0);
   const icon = String(req.body?.icon || '🧺').trim().slice(0, 4) || '🧺';
@@ -382,7 +453,7 @@ app.put('/api/catalog/:id', auth('gerant'), async (req, res) => {
 });
 
 // P3.1 — Price history endpoint
-app.get('/api/catalog/:id/price-history', auth('superviseur', 'gerant'), async (req, res) => {
+app.get('/api/catalog/:id/price-history', auth('catalog.manage', 'stats.view'), async (req, res) => {
   const rows = await qAll(
     `SELECT ph.id, ph.old_price, ph.new_price, ph.old_price_express, ph.new_price_express,
             ph.changed_at, u.username as changed_by_name
@@ -393,7 +464,7 @@ app.get('/api/catalog/:id/price-history', auth('superviseur', 'gerant'), async (
   res.json(rows);
 });
 
-app.delete('/api/catalog/:id', auth('gerant'), async (req, res) => {
+app.delete('/api/catalog/:id', auth('catalog.manage'), async (req, res) => {
   await q('UPDATE catalog SET active=false WHERE id=$1', [+req.params.id]);
   logActivity(req.user, 'delete_catalog', 'catalog', +req.params.id, '');
   res.json({ ok: true });
@@ -402,7 +473,7 @@ app.delete('/api/catalog/:id', auth('gerant'), async (req, res) => {
 /* ══════════════════════════════════════════════════════════════════
    8. PARAMÈTRES
    ══════════════════════════════════════════════════════════════════ */
-app.put('/api/settings', auth('gerant'), async (req, res) => {
+app.put('/api/settings', auth('settings.manage'), async (req, res) => {
   const b = req.body || {};
   const kp = Math.round(+b.kilo_price), dd = Math.round(+b.default_delay);
   const mdp = Math.round(+b.max_discount_percent);
@@ -428,7 +499,7 @@ app.put('/api/settings', auth('gerant'), async (req, res) => {
 });
 
 /* ── Logo upload ── */
-app.post('/api/settings/logo', auth('gerant'), async (req, res) => {
+app.post('/api/settings/logo', auth('settings.manage'), async (req, res) => {
   const logo = String(req.body?.logo || '').trim();
   if (logo && !logo.startsWith('data:image/')) return fail(res, 'Format logo invalide (data:image/… attendu)');
   if (logo.length > 1500000) return fail(res, 'Logo trop volumineux (max ~1 Mo)');
@@ -436,7 +507,7 @@ app.post('/api/settings/logo', auth('gerant'), async (req, res) => {
   res.json({ ok: true });
 });
 
-app.delete('/api/settings/logo', auth('gerant'), async (req, res) => {
+app.delete('/api/settings/logo', auth('settings.manage'), async (req, res) => {
   await setS('invoice_logo', '');
   res.json({ ok: true });
 });
@@ -444,10 +515,10 @@ app.delete('/api/settings/logo', auth('gerant'), async (req, res) => {
 /* ══════════════════════════════════════════════════════════════════
    9. UTILISATEURS
    ══════════════════════════════════════════════════════════════════ */
-app.get('/api/users', auth('gerant'), async (req, res) =>
+app.get('/api/users', auth('users.manage'), async (req, res) =>
   res.json(await qAll('SELECT id,username,name,role,active,must_change FROM users ORDER BY id')));
 
-app.post('/api/users', auth('gerant'), async (req, res) => {
+app.post('/api/users', auth('users.manage'), async (req, res) => {
   const b = req.body || {};
   const name = String(b.name || '').trim(), username = String(b.username || '').trim().toLowerCase();
   if (!name) return fail(res, 'Nom requis');
@@ -461,7 +532,7 @@ app.post('/api/users', auth('gerant'), async (req, res) => {
   } catch (e) { fail(res, e.code === '23505' ? 'Cet identifiant existe déjà' : 'Erreur création utilisateur'); }
 });
 
-app.put('/api/users/:id', auth('gerant'), async (req, res) => {
+app.put('/api/users/:id', auth('users.manage'), async (req, res) => {
   const t = await q1('SELECT * FROM users WHERE id=$1', [+req.params.id]);
   if (!t) return fail(res, 'Utilisateur introuvable', 404);
   const b = req.body || {};
@@ -609,7 +680,7 @@ app.get('/api/orders/:id', auth(), async (req, res) => {
 });
 
 /* ── Édition commande (P2.5) — uniquement statut "depose" ── */
-app.put('/api/orders/:id', auth('superviseur', 'gerant'), async (req, res) => {
+app.put('/api/orders/:id', auth('orders.edit'), async (req, res) => {
   const o = await orderWithPayments(+req.params.id);
   if (!o) return fail(res, 'Commande introuvable', 404);
   if (o.status !== 'depose') return fail(res, 'Seules les commandes au statut "déposé" peuvent être modifiées');
@@ -757,7 +828,7 @@ app.get('/api/clients', auth(), async (req, res) => {
 });
 
 // P1.2 — Create client standalone
-app.post('/api/clients', auth('superviseur', 'gerant'), async (req, res) => {
+app.post('/api/clients', auth('clients.create'), async (req, res) => {
   const { name, phone, email, address, notes } = req.body;
   if (!name || !name.trim()) return fail(res, 'Nom requis');
   // Check duplicate
@@ -799,7 +870,7 @@ app.get('/api/clients/:id', auth(), async (req, res) => {
 });
 
 // P1.2 — Update client
-app.put('/api/clients/:id', auth('superviseur', 'gerant'), async (req, res) => {
+app.put('/api/clients/:id', auth('clients.edit'), async (req, res) => {
   const id = parseInt(req.params.id);
   if (!id) return fail(res, 'ID invalide');
   const { name, phone, email, address, notes } = req.body;
@@ -814,7 +885,7 @@ app.put('/api/clients/:id', auth('superviseur', 'gerant'), async (req, res) => {
 });
 
 // P1.3 — Créances (clients with outstanding balance)
-app.get('/api/creances', auth('superviseur', 'gerant'), async (req, res) => {
+app.get('/api/creances', auth('creances.view'), async (req, res) => {
   const rows = await qAll(`
     SELECT c.id, c.name, c.phone,
       COUNT(o.id)::int unpaid_orders,
@@ -833,13 +904,13 @@ app.get('/api/creances', auth('superviseur', 'gerant'), async (req, res) => {
 /* ══════════════════════════════════════════════════════════════════
    12b. ABONNEMENTS (P2.2)
    ══════════════════════════════════════════════════════════════════ */
-app.get('/api/subscriptions', auth('superviseur', 'gerant'), async (req, res) => {
+app.get('/api/subscriptions', auth('subscriptions.view'), async (req, res) => {
   const rows = await qAll(`SELECT s.*, c.name AS client_name, c.phone AS client_phone
     FROM subscriptions s JOIN clients c ON c.id=s.client_id ORDER BY s.id DESC`);
   res.json(rows);
 });
 
-app.post('/api/subscriptions', auth('superviseur', 'gerant'), async (req, res) => {
+app.post('/api/subscriptions', auth('subscriptions.manage'), async (req, res) => {
   const { client_id, plan_name, total_articles, amount_paid, end_date, notes } = req.body;
   if (!client_id || !plan_name || !total_articles || total_articles < 1) return res.status(400).json({ error: 'Champs requis manquants' });
   const client = await q1('SELECT id FROM clients WHERE id=$1', [+client_id]);
@@ -854,7 +925,7 @@ app.post('/api/subscriptions', auth('superviseur', 'gerant'), async (req, res) =
   res.status(201).json(row);
 });
 
-app.put('/api/subscriptions/:id', auth('superviseur', 'gerant'), async (req, res) => {
+app.put('/api/subscriptions/:id', auth('subscriptions.manage'), async (req, res) => {
   const sub = await q1('SELECT * FROM subscriptions WHERE id=$1', [+req.params.id]);
   if (!sub) return res.status(404).json({ error: 'Abonnement introuvable' });
   const { plan_name, total_articles, amount_paid, end_date, status, notes } = req.body;
@@ -866,7 +937,7 @@ app.put('/api/subscriptions/:id', auth('superviseur', 'gerant'), async (req, res
   res.json(row);
 });
 
-app.post('/api/subscriptions/:id/use', auth(), async (req, res) => {
+app.post('/api/subscriptions/:id/use', auth('subscriptions.use'), async (req, res) => {
   const sub = await q1('SELECT * FROM subscriptions WHERE id=$1', [+req.params.id]);
   if (!sub) return res.status(404).json({ error: 'Abonnement introuvable' });
   if (sub.status !== 'actif') return res.status(400).json({ error: 'Abonnement non actif' });
@@ -887,7 +958,7 @@ app.get('/api/clients/:id/subscriptions', auth(), async (req, res) => {
 /* ══════════════════════════════════════════════════════════════════
    13. DASHBOARD / STATS / RAPPORTS
    ══════════════════════════════════════════════════════════════════ */
-app.get('/api/stats', auth('superviseur', 'gerant'), async (req, res) => {
+app.get('/api/stats', auth('stats.view'), async (req, res) => {
   const t = localDate();
   const today = await q1("SELECT COALESCE(SUM(total),0)::int ca, COUNT(*)::int n FROM orders WHERE day=$1 AND status!='annule'", [t]);
   const pending = (await q1("SELECT COUNT(*)::int n FROM orders WHERE status IN ('depose','traitement')")).n;
@@ -909,7 +980,7 @@ app.get('/api/stats', auth('superviseur', 'gerant'), async (req, res) => {
 });
 
 // P1.5 — Late orders detail for dashboard alerts
-app.get('/api/late-orders', auth('superviseur', 'gerant'), async (req, res) => {
+app.get('/api/late-orders', auth('stats.view'), async (req, res) => {
   const t = localDate();
   const rows = await qAll(`
     SELECT o.id, o.code, o.client_name, o.phone, o.status, o.promise_date, o.day,
@@ -921,7 +992,7 @@ app.get('/api/late-orders', auth('superviseur', 'gerant'), async (req, res) => {
   res.json(rows);
 });
 
-app.get('/api/reports', auth('gerant'), async (req, res) => {
+app.get('/api/reports', auth('reports.view'), async (req, res) => {
   const d30 = new Date(); d30.setDate(d30.getDate() - 29);
   const from = DATE_RE.test(req.query.from || '') ? req.query.from : localDate(d30);
   const to = DATE_RE.test(req.query.to || '') ? req.query.to : localDate();
@@ -966,7 +1037,7 @@ app.get('/api/reports', auth('gerant'), async (req, res) => {
 /* ══════════════════════════════════════════════════════════════════
    14. SAUVEGARDE (export JSON)
    ══════════════════════════════════════════════════════════════════ */
-app.get('/api/backup', auth('gerant'), async (req, res) => {
+app.get('/api/backup', auth('backup.create'), async (req, res) => {
   try {
     const data = {
       exported_at: new Date().toISOString(),
@@ -987,7 +1058,7 @@ app.get('/api/backup', auth('gerant'), async (req, res) => {
 /* ══════════════════════════════════════════════════════════════════
    14c. JOURNAL D'ACTIVITÉS (P2.4)
    ══════════════════════════════════════════════════════════════════ */
-app.get('/api/activity-log', auth('gerant'), async (req, res) => {
+app.get('/api/activity-log', auth('activity.view'), async (req, res) => {
   const page = Math.max(1, +(req.query.page || 1));
   const limit = Math.min(100, Math.max(10, +(req.query.limit || 50)));
   const offset = (page - 1) * limit;
@@ -1002,6 +1073,31 @@ app.get('/api/activity-log', auth('gerant'), async (req, res) => {
   const total = (await q1(`SELECT COUNT(*)::int c FROM activity_log ${wc}`, params)).c;
   const rows = await qAll(`SELECT * FROM activity_log ${wc} ORDER BY created_at DESC LIMIT $${pi++} OFFSET $${pi++}`, [...params, limit, offset]);
   res.json({ rows, total, page, pages: Math.ceil(total / limit) });
+});
+
+/* ══════════════════════════════════════════════════════════════════
+   14d. PERMISSIONS (P3.2)
+   ══════════════════════════════════════════════════════════════════ */
+app.get('/api/permissions', auth('users.manage'), async (req, res) => {
+  res.json({ permissions: PERMISSIONS, defaults: DEFAULT_PERMISSIONS, roles: ROLES });
+});
+
+app.put('/api/permissions', auth('users.manage'), async (req, res) => {
+  const custom = req.body;
+  if (!custom || typeof custom !== 'object') return fail(res, 'Données invalides');
+  // Validate structure: only known roles and known permission keys
+  for (const role of Object.keys(custom)) {
+    if (!ROLES.includes(role)) return fail(res, `Rôle inconnu : ${role}`);
+    if (typeof custom[role] !== 'object') return fail(res, `Permissions invalides pour ${role}`);
+    for (const key of Object.keys(custom[role])) {
+      if (!(key in DEFAULT_PERMISSIONS.gerant)) return fail(res, `Permission inconnue : ${key}`);
+      if (typeof custom[role][key] !== 'boolean') return fail(res, `Valeur invalide pour ${key}`);
+    }
+  }
+  await q("INSERT INTO settings(key,value) VALUES('permissions',$1) ON CONFLICT(key) DO UPDATE SET value=$1", [JSON.stringify(custom)]);
+  await loadPermissions();
+  logActivity(req.user, 'update_permissions', 'settings', null, 'Permissions modifiées');
+  res.json({ ok: true, permissions: PERMISSIONS });
 });
 
 /* ══════════════════════════════════════════════════════════════════

@@ -26,6 +26,7 @@ let U = null,
     S = {},
     CAT = [],
     CART = [],
+    PERMS = {},
     orderType = "article",
     currentPage = "dashboard",
     ordersPage = 1,
@@ -96,7 +97,7 @@ async function doLogout() {
 async function bootstrap() {
     try {
         var t = await api("/api/bootstrap"),
-            e = (U = t.user, S = t.settings, CAT = t.catalog, $("login").style.display = "none", $("app").style.display = "block", $("shop-title").textContent = S.shop_name || "PressingPro", $("user-badge").textContent = U.name, $("role-badge").textContent = U.role.charAt(0).toUpperCase() + U.role.slice(1), document.title = S.shop_name || "PressingPro", buildNav(), renderCatalogGrid(), $("o-pkg").value = S.kilo_price, new Date);
+            e = (U = t.user, S = t.settings, CAT = t.catalog, PERMS = t.permissions || {}, $("login").style.display = "none", $("app").style.display = "block", $("shop-title").textContent = S.shop_name || "PressingPro", $("user-badge").textContent = U.name, $("role-badge").textContent = U.role.charAt(0).toUpperCase() + U.role.slice(1), document.title = S.shop_name || "PressingPro", buildNav(), renderCatalogGrid(), $("o-pkg").value = S.kilo_price, new Date);
         e.setDate(e.getDate() + (S.default_delay || 2)), $("o-promise").value = e.toISOString().slice(0, 10), $("discount-section").classList.remove("hidden");
         try {
             var a = sessionStorage.getItem("pp_cart");
@@ -121,66 +122,68 @@ $("l-pwd").addEventListener("keydown", t => {
 
 /* ══════ SECTION 4 : NAVIGATION & UI ══════════════════════════════ */
 
+function hasPerm(p) { return !!PERMS[p]; }
+
 let PAGES = [{
     id: "dashboard",
     icon: "📊",
     label: "Tableau de bord",
-    roles: ["caissier", "superviseur", "gerant"]
+    perm: null
 }, {
     id: "neworder",
     icon: "🧾",
     label: "Nouvelle commande",
-    roles: ["caissier", "superviseur", "gerant"]
+    perm: "orders.create"
 }, {
     id: "orders",
     icon: "📋",
     label: "Commandes",
-    roles: ["caissier", "superviseur", "gerant"]
+    perm: "orders.view"
 }, {
     id: "clients",
     icon: "👥",
     label: "Clients",
-    roles: ["caissier", "superviseur", "gerant"]
+    perm: "clients.view"
 }, {
     id: "creances",
     icon: "💰",
     label: "Créances",
-    roles: ["superviseur", "gerant"]
+    perm: "creances.view"
 }, {
     id: "subscriptions",
     icon: "🎫",
     label: "Abonnements",
-    roles: ["gerant"]
+    perm: "subscriptions.view"
 }, {
     id: "catalog",
     icon: "🏷️",
     label: "Catalogue",
-    roles: ["gerant"]
+    perm: "catalog.manage"
 }, {
     id: "reports",
     icon: "📈",
     label: "Rapports",
-    roles: ["superviseur", "gerant"]
+    perm: "reports.view"
 }, {
     id: "settings",
     icon: "⚙️",
     label: "Paramètres",
-    roles: ["gerant"]
+    perm: "settings.manage"
 }, {
     id: "users",
     icon: "👤",
     label: "Utilisateurs",
-    roles: ["gerant"]
+    perm: "users.manage"
 }, {
     id: "activity",
     icon: "📜",
     label: "Journal",
-    roles: ["superviseur", "gerant"]
+    perm: "activity.view"
 }];
 
 function buildNav() {
     let a = $("nav");
-    a.innerHTML = "", PAGES.filter(t => t.roles.includes(U.role)).forEach(t => {
+    a.innerHTML = "", PAGES.filter(t => t.perm === null || hasPerm(t.perm)).forEach(t => {
         var e = document.createElement("button");
         e.innerHTML = `<span class="icon">${t.icon}</span>` + t.label, e.onclick = () => nav(t.id), e.dataset.page = t.id, a.appendChild(e)
     })
@@ -457,7 +460,7 @@ async function showOrder(t) {
                 livre: "📦 Livrer"
             } [t] || t;
             s += `<button class="btn btn-sm" onclick="changeStatus(${a.id},'${t}')">${e}</button>`
-        }), "depose"===a.status&&["superviseur","gerant"].includes(U.role)&&(s+=`<button class="btn btn-sm" style="background:var(--pri)" onclick="showEditOrderModal(${a.id})">✏️ Éditer</button>`), l && (s += `<button class="btn-d btn-sm" onclick="changeStatus(${a.id},'annule')">❌ Annuler</button>`), "annule" !== a.status && (s += `<button class="btn-o btn-sm" onclick="printOrder(${a.id},'${"livre"===a.status?"facture":"depot"}')">🖨️ ${"livre"===a.status?"Facture":"Bon"}</button>`), a.track_token && a.phone && (e = location.origin + "/suivi/" + a.track_token, o = a.phone.replace(/\s/g, "").replace(/^\+/, ""), i = encodeURIComponent("Bonjour " + esc(a.client_name) + ",\nSuivez votre commande " + esc(a.code) + " ici :\n" + e), s = s + `<a href="https://wa.me/${o}?text=${i}" target="_blank" class="btn btn-sm" style="background:#25D366;border:none;display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:#fff">💬 WhatsApp</a>` + `<button class="btn-o btn-sm" onclick="navigator.clipboard.writeText('${e}');toast('Lien copié !','ok')">📋 Copier lien suivi</button>`), s += "</div></div>", $("order-detail-content").innerHTML = s
+        }), "depose"===a.status&&hasPerm('orders.edit')&&(s+=`<button class="btn btn-sm" style="background:var(--pri)" onclick="showEditOrderModal(${a.id})">✏️ Éditer</button>`), l && (s += `<button class="btn-d btn-sm" onclick="changeStatus(${a.id},'annule')">❌ Annuler</button>`), "annule" !== a.status && (s += `<button class="btn-o btn-sm" onclick="printOrder(${a.id},'${"livre"===a.status?"facture":"depot"}')">🖨️ ${"livre"===a.status?"Facture":"Bon"}</button>`), a.track_token && a.phone && (e = location.origin + "/suivi/" + a.track_token, o = a.phone.replace(/\s/g, "").replace(/^\+/, ""), i = encodeURIComponent("Bonjour " + esc(a.client_name) + ",\nSuivez votre commande " + esc(a.code) + " ici :\n" + e), s = s + `<a href="https://wa.me/${o}?text=${i}" target="_blank" class="btn btn-sm" style="background:#25D366;border:none;display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:#fff">💬 WhatsApp</a>` + `<button class="btn-o btn-sm" onclick="navigator.clipboard.writeText('${e}');toast('Lien copié !','ok')">📋 Copier lien suivi</button>`), s += "</div></div>", $("order-detail-content").innerHTML = s
     } catch (t) {
         toast(t.message, "err"), nav("orders")
     }
@@ -684,7 +687,7 @@ async function loadClients() {
         $("client-detail-card").style.display = "none";
         // Show add-client button for superviseur/gerant only
         var btnAdd = $("btn-add-client");
-        if (btnAdd) btnAdd.style.display = (U.role !== 'caissier') ? "" : "none";
+        if (btnAdd) btnAdd.style.display = hasPerm('clients.create') ? "" : "none";
     } catch (t) {
         toast(t.message, "err")
     }
@@ -735,7 +738,7 @@ function renderClientsTable() {
             '<td>' + t.n + '</td>' +
             '<td class="text-right">' + fmt(t.ca) + '</td>' +
             '<td class="text-right" style="color:' + (t.due > 0 ? "var(--err)" : "var(--ok)") + '">' + (t.due > 0 ? fmt(t.due) : "—") + '</td>' +
-            (U.role !== 'caissier' ? '<td><button class="btn-o btn-sm" onclick="event.stopPropagation();editClientModal(' + t.id + ')">✏️</button></td>' : '<td></td>') +
+            (hasPerm('clients.edit') ? '<td><button class="btn-o btn-sm" onclick="event.stopPropagation();editClientModal(' + t.id + ')">✏️</button></td>' : '<td></td>') +
             '</tr>';
     }).join("") || '<tr><td colspan="6" class="text-center">Aucun client</td></tr>';
 }
@@ -767,7 +770,7 @@ async function showClientDetail(id) {
             '<div><strong>Adresse :</strong> ' + esc(c.address || "—") + '</div>' +
             '<div><strong>Notes :</strong> ' + esc(c.notes || "—") + '</div>' +
             '</div>' +
-            (U.role !== 'caissier' ? '<div style="margin-top:10px"><button class="btn btn-sm" onclick="editClientModal(' + c.id + ')">✏️ Modifier</button></div>' : '') +
+            (hasPerm('clients.edit') ? '<div style="margin-top:10px"><button class="btn btn-sm" onclick="editClientModal(' + c.id + ')">✏️ Modifier</button></div>' : '') +
             '</div>';
 
         var ordersHtml = '<h3 style="margin:16px 0 8px">Historique des commandes</h3>';
@@ -1078,6 +1081,7 @@ async function loadUsers() {
     } catch (t) {
         toast(t.message, "err")
     }
+    if (hasPerm('users.manage')) loadPermissionsAdmin();
 }
 
 function showUserModal(t) {
@@ -1111,6 +1115,69 @@ async function saveUser(t) {
     }
 }
 
+
+/* ══════ SECTION 13c : PERMISSIONS (P3.2) ════════════════════════ */
+const PERM_LABELS = {
+  'orders.create': 'Créer commande', 'orders.view': 'Voir commandes', 'orders.edit': 'Éditer commande',
+  'orders.cancel': 'Annuler commande', 'orders.status': 'Changer statut',
+  'payments.create': 'Encaisser', 'payments.view': 'Voir paiements',
+  'clients.view': 'Voir clients', 'clients.create': 'Créer client', 'clients.edit': 'Éditer client',
+  'catalog.view': 'Voir catalogue', 'catalog.manage': 'Gérer catalogue',
+  'subscriptions.view': 'Voir abonnements', 'subscriptions.manage': 'Gérer abonnements', 'subscriptions.use': 'Utiliser abonnement',
+  'stats.view': 'Voir statistiques', 'reports.view': 'Voir rapports', 'reports.export': 'Exporter rapports',
+  'creances.view': 'Voir créances', 'settings.manage': 'Gérer paramètres',
+  'users.manage': 'Gérer utilisateurs', 'activity.view': 'Voir journal', 'backup.create': 'Sauvegardes'
+};
+
+let PERMS_DATA = null;
+
+async function loadPermissionsAdmin() {
+  try {
+    PERMS_DATA = await api('/api/permissions');
+    renderPermissionsTable();
+  } catch(e) { /* silently ignore if not authorized */ }
+}
+
+function renderPermissionsTable() {
+  if (!PERMS_DATA) return;
+  const roles = PERMS_DATA.roles.filter(r => r !== 'gerant');
+  const allKeys = Object.keys(PERM_LABELS);
+  let h = '<table style="font-size:.85rem"><thead><tr><th style="min-width:180px">Permission</th>';
+  roles.forEach(r => { h += '<th style="text-align:center">' + esc(r.charAt(0).toUpperCase() + r.slice(1)) + '</th>'; });
+  h += '<th style="text-align:center;opacity:.5">Gérant</th></tr></thead><tbody>';
+  // Group by module
+  let lastMod = '';
+  allKeys.forEach(k => {
+    const mod = k.split('.')[0];
+    if (mod !== lastMod) {
+      lastMod = mod;
+      h += '<tr><td colspan="' + (roles.length + 2) + '" style="font-weight:700;padding-top:12px;border-bottom:1px solid rgba(255,255,255,.1)">' + esc(mod.charAt(0).toUpperCase() + mod.slice(1)) + '</td></tr>';
+    }
+    h += '<tr><td style="padding-left:1.5rem">' + esc(PERM_LABELS[k] || k) + '</td>';
+    roles.forEach(r => {
+      const checked = !!(PERMS_DATA.permissions[r] && PERMS_DATA.permissions[r][k]);
+      h += '<td style="text-align:center"><input type="checkbox" data-role="' + r + '" data-perm="' + k + '"' + (checked ? ' checked' : '') + '></td>';
+    });
+    h += '<td style="text-align:center"><input type="checkbox" checked disabled></td></tr>';
+  });
+  h += '</tbody></table>';
+  $('perms-table-wrap').innerHTML = h;
+}
+
+async function savePermissions() {
+  const custom = {};
+  document.querySelectorAll('#perms-table-wrap input[type=checkbox]:not(:disabled)').forEach(cb => {
+    const r = cb.dataset.role, p = cb.dataset.perm;
+    if (!custom[r]) custom[r] = {};
+    custom[r][p] = cb.checked;
+  });
+  try {
+    const res = await api('/api/permissions', { method: 'PUT', body: JSON.stringify(custom) });
+    PERMS = res.permissions[U.role] || {};
+    toast('Permissions enregistrées', 'ok');
+    buildNav();
+  } catch(e) { toast(e.message, 'err'); }
+}
 
 /* ══════ SECTION 13b : ABONNEMENTS (P2.2) ════════════════════════ */
 

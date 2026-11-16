@@ -517,6 +517,15 @@ tr:hover td{background:rgba(255,255,255,.04)}
         </div>
         <div style="overflow-x:auto"><table><thead><tr><th>Identifiant</th><th>Nom</th><th>Rôle</th><th>Actif</th><th></th></tr></thead><tbody id="users-body"></tbody></table></div>
       </div>
+      <!-- P3.2 — Permissions fines -->
+      <div class="card" style="margin-top:1rem">
+        <div class="flex justify-between items-center mb-8">
+          <h2>🔐 Permissions par rôle</h2>
+          <button class="btn btn-sm" onclick="savePermissions()">💾 Enregistrer</button>
+        </div>
+        <p style="opacity:.7;font-size:.85rem;margin-bottom:1rem">Cochez ou décochez pour personnaliser les accès de chaque rôle. Le gérant conserve toujours tous les droits.</p>
+        <div style="overflow-x:auto" id="perms-table-wrap"></div>
+      </div>
     </div>
 
     <!-- P2.4 — Journal d'activités -->
