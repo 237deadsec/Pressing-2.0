@@ -242,10 +242,10 @@ function drawBarChart(t, o, i) {
         l = t.height = 180,
         d = (n.clearRect(0, 0, r, l), Math.max(...i, 1)),
         c = Math.min(40, (r - 60) / o.length - 8);
-    n.font = "11px sans-serif", n.fillStyle = "#5f6368", n.textAlign = "center", o.forEach((t, e) => {
+    n.font = "11px sans-serif", n.fillStyle = "rgba(255,255,255,.6)", n.textAlign = "center", o.forEach((t, e) => {
         var a = 40 + e * ((r - 80) / (o.length - 1 || 1)),
             s = i[e] / d * (l - 50);
-        n.fillStyle = "#1a73e8", n.fillRect(a - c / 2, l - 30 - s, c, s), n.fillStyle = "#5f6368", n.fillText(t, a, l - 10), i[e] && n.fillText(fmt(i[e]), a, l - 35 - s)
+        n.fillStyle = "#6c5ce7", n.fillRect(a - c / 2, l - 30 - s, c, s), n.fillStyle = "rgba(255,255,255,.6)", n.fillText(t, a, l - 10), i[e] && n.fillText(fmt(i[e]), a, l - 35 - s)
     })
 }
 
@@ -257,7 +257,7 @@ function renderCatalogGrid() {
     CAT.forEach(t => { const c = t.category || 'Divers'; (cats[c] = cats[c] || []).push(t); });
     let html = '';
     for (const [cat, items] of Object.entries(cats)) {
-      html += `<div style="margin-bottom:12px"><div style="font-size:.8rem;font-weight:600;opacity:.7;margin-bottom:6px;text-transform:uppercase">${esc(cat)}</div>
+      html += `<div style="margin-bottom:12px"><div style="font-size:.8rem;font-weight:600;opacity:.8;margin-bottom:6px;text-transform:uppercase">${esc(cat)}</div>
         <div class="grid4">${items.map(t => `<button class="btn-o" style="padding:10px;text-align:center;min-height:60px" onclick="addToCart(${t.id})">
           <div style="font-size:1.3rem">${esc(t.icon)}</div>
           <div style="font-size:.8rem;margin-top:2px">${esc(t.name)}</div>
@@ -325,7 +325,7 @@ function searchClient(e) {
     clearTimeout(searchTimer), e.length < 2 ? $("client-suggest").innerHTML = "" : searchTimer = setTimeout(async () => {
         try {
             SEARCH_RESULTS = await api("/api/clients/search?q=" + encodeURIComponent(e));
-            SEARCH_RESULTS.length ? $("client-suggest").innerHTML = '<div style="position:absolute;top:0;left:0;right:0;background:#fff;border:1px solid var(--brd);border-radius:6px;box-shadow:var(--shadow);z-index:10;max-height:200px;overflow-y:auto">' + SEARCH_RESULTS.map((t,i) => `<div style="padding:10px;cursor:pointer;min-height:44px;display:flex;align-items:center" onclick="pickClient(${i})">${esc(t.name)} <span style="color:var(--txt2);margin-left:8px">${esc(t.phone||"")}</span></div>`).join("") + "</div>" : $("client-suggest").innerHTML = ""
+            SEARCH_RESULTS.length ? $("client-suggest").innerHTML = '<div style="position:absolute;top:0;left:0;right:0;background:var(--bg2);border:1px solid var(--brd);border-radius:6px;box-shadow:var(--shadow);z-index:10;max-height:200px;overflow-y:auto">' + SEARCH_RESULTS.map((t,i) => `<div style="padding:10px;cursor:pointer;min-height:44px;display:flex;align-items:center;border-bottom:1px solid var(--brd)" onmouseover="this.style.background='var(--glass)'" onmouseout="this.style.background=''" onclick="pickClient(${i})">${esc(t.name)} <span style="color:var(--txt2);margin-left:8px">${esc(t.phone||"")}</span></div>`).join("") + "</div>" : $("client-suggest").innerHTML = ""
         } catch (t) {}
     }, 300)
 }
@@ -791,7 +791,7 @@ async function showClientDetail(id) {
             }).join("");
             ordersHtml += '</tbody></table></div>';
         } else {
-            ordersHtml += '<p style="color:var(--muted);text-align:center;padding:20px">Aucune commande</p>';
+            ordersHtml += '<p style="color:var(--txt2);text-align:center;padding:20px">Aucune commande</p>';
         }
 
         $("client-detail-content").innerHTML = statsHtml + infoHtml + ordersHtml;
@@ -809,7 +809,7 @@ async function editClientModal(id) {
             '<div class="form-group"><label>Téléphone</label><input id="edit-cl-phone" value="' + esc(c.phone || "") + '"></div>' +
             '<div class="form-group"><label>Email</label><input id="edit-cl-email" type="email" value="' + esc(c.email || "") + '"></div>' +
             '<div class="form-group"><label>Adresse</label><input id="edit-cl-address" value="' + esc(c.address || "") + '"></div>' +
-            '<div class="form-group"><label>Notes</label><textarea id="edit-cl-notes" rows="3" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--glass);color:var(--text)">' + esc(c.notes || "") + '</textarea></div>' +
+            '<div class="form-group"><label>Notes</label><textarea id="edit-cl-notes" rows="3" style="width:100%;padding:8px;border:1px solid var(--brd);border-radius:8px;background:var(--glass);color:var(--txt)">' + esc(c.notes || "") + '</textarea></div>' +
             '<div class="actions"><button class="btn-o" onclick="closeModal()">Annuler</button>' +
             '<button class="btn" onclick="saveClient(' + id + ')">Enregistrer</button></div>'
         );
@@ -979,7 +979,7 @@ async function showPriceHistory(id) {
         var rows = await api("/api/catalog/" + id + "/price-history");
         var html = '<h3>📊 Historique des prix — ' + name + '</h3>';
         if (!rows.length) {
-            html += '<p style="text-align:center;opacity:.6;padding:20px 0">Aucun changement de prix enregistré</p>';
+            html += '<p style="text-align:center;opacity:.75;padding:20px 0">Aucun changement de prix enregistré</p>';
         } else {
             html += '<table class="table" style="font-size:.85rem"><thead><tr><th>Date</th><th>Ancien prix</th><th>Nouveau prix</th><th>Modifié par</th></tr></thead><tbody>';
             rows.forEach(function(r) {
@@ -996,7 +996,7 @@ async function showPriceHistory(id) {
                     var diffE = r.new_price_express - r.old_price_express;
                     var diffEClass = diffE > 0 ? 'color:var(--err)' : 'color:var(--ok)';
                     var diffEStr = diffE > 0 ? '+' + fmt(diffE) : fmt(diffE);
-                    html += '<tr style="opacity:.7"><td><small>↳ Express</small></td><td class="text-right"><small>' + fmt(r.old_price_express) + '</small></td><td class="text-right"><small>' + fmt(r.new_price_express) + ' <span style="' + diffEClass + '">(' + diffEStr + ')</span></small></td><td></td></tr>';
+                    html += '<tr style="opacity:.8"><td><small>↳ Express</small></td><td class="text-right"><small>' + fmt(r.old_price_express) + '</small></td><td class="text-right"><small>' + fmt(r.new_price_express) + ' <span style="' + diffEClass + '">(' + diffEStr + ')</span></small></td><td></td></tr>';
                 }
             });
             html += '</tbody></table>';
@@ -1144,7 +1144,7 @@ function renderPermissionsTable() {
   const allKeys = Object.keys(PERM_LABELS);
   let h = '<table style="font-size:.85rem"><thead><tr><th style="min-width:180px">Permission</th>';
   roles.forEach(r => { h += '<th style="text-align:center">' + esc(r.charAt(0).toUpperCase() + r.slice(1)) + '</th>'; });
-  h += '<th style="text-align:center;opacity:.5">Gérant</th></tr></thead><tbody>';
+  h += '<th style="text-align:center;opacity:.75">Gérant</th></tr></thead><tbody>';
   // Group by module
   let lastMod = '';
   allKeys.forEach(k => {
@@ -1185,12 +1185,12 @@ async function loadSubscriptions() {
     try {
         const rows = await api('/api/subscriptions');
         const tb = $('subs-body');
-        if (!rows.length) { tb.innerHTML = '<tr><td colspan="7" style="text-align:center;opacity:.6">Aucun abonnement</td></tr>'; return; }
+        if (!rows.length) { tb.innerHTML = '<tr><td colspan="7" style="text-align:center;opacity:.75">Aucun abonnement</td></tr>'; return; }
         tb.innerHTML = rows.map(s => {
             const pct = s.total_articles ? Math.round(s.used_articles / s.total_articles * 100) : 0;
             const statusColor = s.status === 'actif' ? 'var(--ok)' : s.status === 'épuisé' ? 'var(--warn)' : 'var(--err)';
             return `<tr>
-              <td><b>${esc(s.client_name)}</b><br><small style="opacity:.6">${esc(s.client_phone||'')}</small></td>
+              <td><b>${esc(s.client_name)}</b><br><small style="opacity:.75">${esc(s.client_phone||'')}</small></td>
               <td>${esc(s.plan_name)}</td>
               <td><div style="display:flex;align-items:center;gap:6px"><div style="flex:1;background:rgba(255,255,255,.1);border-radius:4px;height:8px;min-width:60px"><div style="width:${pct}%;height:100%;border-radius:4px;background:${statusColor}"></div></div><span style="font-size:.8rem">${s.used_articles}/${s.total_articles}</span></div></td>
               <td class="text-right">${fmt(s.amount_paid)}</td>
@@ -1372,7 +1372,7 @@ async function loadActivityLog() {
         <th>Action</th><th>Entité</th><th>Détail</th>
     </tr></thead><tbody>`;
     if (!d.rows.length) {
-        h += `<tr><td colspan="6" style="text-align:center;opacity:.6">Aucune activité</td></tr>`;
+        h += `<tr><td colspan="6" style="text-align:center;opacity:.75">Aucune activité</td></tr>`;
     }
     for (const r of d.rows) {
         const dt = new Date(r.created_at);
