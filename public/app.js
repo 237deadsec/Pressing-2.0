@@ -201,7 +201,11 @@ function toggleSidebar() {
 
 function toast(t, e = "ok") {
     let a = document.createElement("div");
-    a.className = "toast toast-" + e, a.textContent = t, document.body.appendChild(a), setTimeout(() => a.remove(), 3500)
+    a.className = "toast toast-" + e, a.textContent = t, document.body.appendChild(a);
+    setTimeout(() => {
+        a.classList.add("toast-exit");
+        a.addEventListener("animationend", () => a.remove(), { once: true });
+    }, 3200)
 }
 
 
@@ -1412,7 +1416,12 @@ function showModal(t) {
 }
 
 function closeModal() {
-    $("generic-modal").classList.remove("open")
+    const m = $("generic-modal");
+    if (!m.classList.contains("open")) return;
+    m.classList.add("closing");
+    m.addEventListener("animationend", function() {
+        m.classList.remove("open", "closing");
+    }, { once: true });
 }
 
 $("os-q").addEventListener("keydown", t => {
@@ -1421,4 +1430,19 @@ $("os-q").addEventListener("keydown", t => {
 
 document.addEventListener("keydown", t => {
     "Escape" === t.key && closeModal()
+});
+
+/* ══════ P3.5 : Ripple effect on .btn clicks ═══════════════════ */
+document.addEventListener("click", function(e) {
+    const btn = e.target.closest(".btn");
+    if (!btn) return;
+    const r = document.createElement("span");
+    r.className = "ripple";
+    const rect = btn.getBoundingClientRect();
+    const sz = Math.max(rect.width, rect.height);
+    r.style.width = r.style.height = sz + "px";
+    r.style.left = (e.clientX - rect.left - sz / 2) + "px";
+    r.style.top = (e.clientY - rect.top - sz / 2) + "px";
+    btn.appendChild(r);
+    r.addEventListener("animationend", () => r.remove(), { once: true });
 });
