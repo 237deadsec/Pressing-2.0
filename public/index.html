@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>PressingPro</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#6c5ce7">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PressingPro">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
 <style>
 :root{
   --pri:#6c5ce7;--pri-d:#5a4bd1;--pri-l:rgba(108,92,231,.15);
@@ -661,5 +668,23 @@ input:focus,select:focus,textarea:focus{
 <div id="receipt-print" style="display:none"></div>
 
 <script src="/app.js"></script>
+<script>
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('/sw.js')
+      .then(r=>{
+        r.addEventListener('updatefound',()=>{
+          const w=r.installing;
+          if(w) w.addEventListener('statechange',()=>{
+            if(w.state==='installed'&&navigator.serviceWorker.controller){
+              if(typeof toast==='function') toast('Mise à jour disponible — rechargez','info');
+            }
+          });
+        });
+      })
+      .catch(e=>console.warn('SW registration failed:',e));
+  });
+}
+</script>
 </body>
 </html>

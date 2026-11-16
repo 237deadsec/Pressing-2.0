@@ -318,7 +318,14 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders(res, filePath) {
+    if (filePath.endsWith('sw.js')) {
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Service-Worker-Allowed', '/');
+    }
+  }
+}));
 
 // Trust proxy (Cloudflare Tunnel, NGINX, Vercel)
 app.set('trust proxy', ['loopback', 'linklocal', 'uniquelocal']);
