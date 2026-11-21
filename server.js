@@ -3,6 +3,7 @@ const express = require('express');
 const { Pool } = require('pg');
 const crypto = require('crypto');
 const path = require('path');
+const fs = require('fs');
 const os = require('os');
 
 /* ══════════════════════════════════════════════════════════════════
@@ -1143,31 +1144,81 @@ app.get('/api/track/:token', async (req, res) => {
 });
 
 app.get('/suivi/:token', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'suivi.html'));
+  try {
+    const html = fs.readFileSync(path.join(PWA_DIR, 'suivi.html'), 'utf8');
+    res.type('html').send(html);
+  } catch {
+    try {
+      const html = fs.readFileSync(path.resolve('public', 'suivi.html'), 'utf8');
+      res.type('html').send(html);
+    } catch { res.status(404).send('Page non trouvée'); }
+  }
 });
 
-/* ── PWA static files (explicit routes — express.static unreliable on Vercel) ── */
+/* ── PWA static files (served from memory — sendFile/express.static broken on Vercel) ── */
+const PWA_DIR = path.join(__dirname, 'public');
+const PWA_FILES = {};
+try {
+  PWA_FILES.manifest = fs.readFileSync(path.join(PWA_DIR, 'manifest.json'), 'utf8');
+  PWA_FILES.sw = fs.readFileSync(path.join(PWA_DIR, 'sw.js'), 'utf8');
+  PWA_FILES.offline = fs.readFileSync(path.join(PWA_DIR, 'offline.html'), 'utf8');
+  console.log('[PWA] Static files loaded into memory OK');
+} catch (e) {
+  console.error('[PWA] Failed to load static files from', PWA_DIR, e.message);
+  // Try alternative path resolution for Vercel
+  try {
+    const ALT_DIR = path.resolve('public');
+    PWA_FILES.manifest = fs.readFileSync(path.join(ALT_DIR, 'manifest.json'), 'utf8');
+    PWA_FILES.sw = fs.readFileSync(path.join(ALT_DIR, 'sw.js'), 'utf8');
+    PWA_FILES.offline = fs.readFileSync(path.join(ALT_DIR, 'offline.html'), 'utf8');
+    console.log('[PWA] Static files loaded from alt path', ALT_DIR);
+  } catch (e2) {
+    console.error('[PWA] Alt path also failed:', e2.message);
+  }
+}
+
 app.get('/manifest.json', (_req, res) => {
+  if (!PWA_FILES.manifest) return res.status(404).end();
   res.setHeader('Content-Type', 'application/manifest+json');
-  res.sendFile(path.join(__dirname, 'public', 'manifest.json'));
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.send(PWA_FILES.manifest);
 });
 app.get('/sw.js', (_req, res) => {
+  if (!PWA_FILES.sw) return res.status(404).end();
   res.setHeader('Content-Type', 'application/javascript');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Service-Worker-Allowed', '/');
-  res.sendFile(path.join(__dirname, 'public', 'sw.js'));
+  res.send(PWA_FILES.sw);
 });
 app.get('/offline.html', (_req, res) => {
+  if (!PWA_FILES.offline) return res.status(404).end();
   res.setHeader('Content-Type', 'text/html');
-  res.sendFile(path.join(__dirname, 'public', 'offline.html'));
+  res.send(PWA_FILES.offline);
 });
 app.get('/icons/:file', (req, res) => {
-  const filePath = path.join(__dirname, 'public', 'icons', req.params.file);
-  res.sendFile(filePath, (err) => { if (err) res.status(404).end(); });
+  const filePath = path.join(PWA_DIR, 'icons', req.params.file);
+  try {
+    const buf = fs.readFileSync(filePath);
+    const ext = path.extname(req.params.file).toLowerCase();
+    const mime = ext === '.svg' ? 'image/svg+xml' : ext === '.png' ? 'image/png' : 'application/octet-stream';
+    res.setHeader('Content-Type', mime);
+    res.setHeader('Cache-Control', 'public, max-age=604800');
+    res.send(buf);
+  } catch { res.status(404).end(); }
 });
 
-// SPA fallback
-app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+// SPA fallback — serve index.html from memory
+let INDEX_HTML;
+try {
+  INDEX_HTML = fs.readFileSync(path.join(PWA_DIR, 'index.html'), 'utf8');
+} catch {
+  try { INDEX_HTML = fs.readFileSync(path.resolve('public', 'index.html'), 'utf8'); }
+  catch { console.error('[SPA] Could not load index.html'); }
+}
+app.get('*', (req, res) => {
+  if (!INDEX_HTML) return res.status(500).send('Application unavailable');
+  res.type('html').send(INDEX_HTML);
+});
 
 app.use((err, req, res, next) => { console.error(err); fail(res, 'Erreur serveur', 500); });
 
