@@ -1146,6 +1146,26 @@ app.get('/suivi/:token', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'suivi.html'));
 });
 
+/* ── PWA static files (explicit routes — express.static unreliable on Vercel) ── */
+app.get('/manifest.json', (_req, res) => {
+  res.setHeader('Content-Type', 'application/manifest+json');
+  res.sendFile(path.join(__dirname, 'public', 'manifest.json'));
+});
+app.get('/sw.js', (_req, res) => {
+  res.setHeader('Content-Type', 'application/javascript');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Service-Worker-Allowed', '/');
+  res.sendFile(path.join(__dirname, 'public', 'sw.js'));
+});
+app.get('/offline.html', (_req, res) => {
+  res.setHeader('Content-Type', 'text/html');
+  res.sendFile(path.join(__dirname, 'public', 'offline.html'));
+});
+app.get('/icons/:file', (req, res) => {
+  const filePath = path.join(__dirname, 'public', 'icons', req.params.file);
+  res.sendFile(filePath, (err) => { if (err) res.status(404).end(); });
+});
+
 // SPA fallback
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
