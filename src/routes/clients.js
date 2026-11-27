@@ -7,7 +7,7 @@ const { auth } = require('../middleware');
 const router = Router();
 
 /* GET / — list all clients with aggregated stats */
-router.get('/', auth(), async (req, res) => {
+router.get('/', auth('clients.view'), async (req, res) => {
   res.json(await qAll(`SELECT c.id, c.name, c.phone, COUNT(o.id)::int n, COALESCE(SUM(o.total),0)::int ca,
     COALESCE(SUM(CASE WHEN o.status!='annule' THEN o.total - COALESCE(pay.t,0) ELSE 0 END),0)::int due
     FROM clients c LEFT JOIN orders o ON o.client_id=c.id AND o.status!='annule'
@@ -37,7 +37,7 @@ router.get('/search', auth(), async (req, res) => {
 });
 
 /* GET /:id — client detail with stats + recent orders */
-router.get('/:id', auth(), async (req, res) => {
+router.get('/:id', auth('clients.view'), async (req, res) => {
   const id = parseInt(req.params.id);
   if (!id) return fail(res, 'ID invalide');
   const client = await q1(`SELECT c.id, c.name, c.phone, COALESCE(c.email,'') email, COALESCE(c.address,'') address, COALESCE(c.notes,'') notes,
@@ -56,7 +56,7 @@ router.get('/:id', auth(), async (req, res) => {
 });
 
 /* GET /:id/subscriptions — client subscriptions */
-router.get('/:id/subscriptions', auth(), async (req, res) => {
+router.get('/:id/subscriptions', auth('clients.view', 'subscriptions.view', 'subscriptions.use'), async (req, res) => {
   const rows = await qAll('SELECT * FROM subscriptions WHERE client_id=$1 ORDER BY id DESC', [+req.params.id]);
   res.json(rows);
 });

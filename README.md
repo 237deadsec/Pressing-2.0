@@ -9,7 +9,8 @@ Logiciel de caisse et de gestion pour un pressing, utilisé par la boutique Ligh
 - **Clients**, **abonnements** (forfaits de N articles), **catalogue** par catégorie avec historique des prix.
 - **Statistiques**, rapports CSV ou imprimables, alertes de commandes en retard.
 - **Journal d'activité**, sauvegarde JSON, paramètres (logo, format de facture).
-- **Rôles** `caissier`, `superviseur`, `gerant`, avec permissions fines par module (modifiables par le gérant).
+- **Rôles** `caissier`, `superviseur`, `gerant`, avec permissions fines par module (modifiables par le gérant), appliquées par le serveur.
+- Toutes les tables ont la RLS activée sans policy : l'API REST publique de Supabase n'en lit aucune ligne.
 - **Page publique de suivi** pour le client : `/suivi/:token`.
 - **PWA** installable avec page hors ligne.
 
@@ -44,7 +45,9 @@ public/              SPA (index.html, app.js), suivi.html, service worker, manif
 | Variable | Obligatoire | Rôle |
 |---|---|---|
 | `DATABASE_URL` | **Oui** | Chaîne de connexion PostgreSQL. Le processus s'arrête si elle manque. SSL activé automatiquement si l'URL contient `supabase` ou `sslmode=require`. |
-| `SESSION_SECRET` | **Oui en pratique** | Clé de signature des cookies de session. Si elle manque, une valeur aléatoire est générée à chaque démarrage : toutes les sessions sont perdues au redémarrage, et sur Vercel chaque instance a son propre secret (déconnexions aléatoires). Générer avec `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. |
+| `SESSION_SECRET` | **Oui en production** | Clé de signature des cookies de session. En production (Vercel, ou `NODE_ENV=production`), le serveur refuse de démarrer sans elle. En local, une valeur aléatoire est générée à chaque démarrage (sessions perdues au redémarrage). Générer avec `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. |
+| `INITIAL_ADMIN_PASSWORD` | **Oui pour une base vierge en production** | Mot de passe (10 caractères minimum) du seul compte créé sur une base vierge : `gerant`, avec changement imposé à la première connexion. Sans elle, en production, l'initialisation échoue plutôt que de créer des comptes aux mots de passe publics. Inutile une fois la base remplie. |
+| `APP_TZ` | Non | Fuseau horaire de la boutique pour dater les commandes et les statistiques. Défaut `Africa/Douala` (UTC+1). Les serveurs Vercel tournent en UTC. |
 | `PORT` | Non | Port d'écoute en local. Défaut `3000`. Ignoré sur Vercel. |
 | `VERCEL` | Non | Définie automatiquement par Vercel. Si présente, l'app est exportée au lieu d'écouter sur un port, et le schéma est initialisé à la première requête `/api`. |
 
@@ -63,7 +66,7 @@ npm start
 
 Puis ouvrir http://localhost:3000. Le serveur affiche aussi son adresse sur le réseau local, pour les postes de caisse de la boutique.
 
-**Comptes initiaux.** Ils sont créés seulement si la table `users` est vide : `gerant` / `0000`, `superviseur` / `2345`, `caissier` / `1234`. Un changement de mot de passe est imposé à la première connexion. Fais-le immédiatement sur toute installation accessible depuis Internet.
+**Comptes initiaux.** Ils sont créés seulement si la table `users` est vide. En local : `gerant` / `0000`, `superviseur` / `2345`, `caissier` / `1234`. En production : seulement `gerant`, avec le mot de passe `INITIAL_ADMIN_PASSWORD`. Dans les deux cas, le serveur refuse toute action (sauf changer le mot de passe) tant que le mot de passe initial n'a pas été changé.
 
 ## Tests
 
@@ -76,7 +79,7 @@ TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres npm test
 ## Déployer sur Vercel
 
 1. Importer le dépôt dans Vercel. `vercel.json` envoie toutes les requêtes vers `server.js` (`@vercel/node`) et embarque `public/**`.
-2. Définir `DATABASE_URL` et `SESSION_SECRET` dans Project Settings → Environment Variables (Production et Preview).
+2. Définir `DATABASE_URL`, `SESSION_SECRET` et, pour une base vierge, `INITIAL_ADMIN_PASSWORD` dans Project Settings → Environment Variables (Production et Preview).
 3. Déployer. Attention : au premier appel `/api`, `initDB()` complète le schéma de la base visée. Un déploiement Preview qui partage le `DATABASE_URL` de production modifie donc la base de production. Vérifier ensuite `GET /api/health`, qui doit renvoyer `{"status":"ok"}`.
 
 Limites connues du mode serverless :
@@ -92,7 +95,7 @@ Limites connues du mode serverless :
 ## API utile
 
 - `GET /api/health` : test de connexion à la base, public.
-- `GET /api/backup` : export JSON de toutes les tables (permission `backup.create`).
+- `GET /api/backup` : export JSON de toutes les tables, abonnements, historique des prix et journal compris (permission `backup.create`).
 
 ## Feuille de route
 

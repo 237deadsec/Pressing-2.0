@@ -16,7 +16,10 @@ router.get('/', auth('backup.create'), async (req, res) => {
       orders: await qAll('SELECT * FROM orders ORDER BY id'),
       payments: await qAll('SELECT * FROM payments ORDER BY id'),
       status_history: await qAll('SELECT * FROM status_history ORDER BY id'),
-      settings: await qAll('SELECT * FROM settings ORDER BY key')
+      settings: await qAll('SELECT * FROM settings ORDER BY key'),
+      subscriptions: await qAll('SELECT * FROM subscriptions ORDER BY id'),
+      price_history: await qAll('SELECT * FROM price_history ORDER BY id'),
+      activity_log: await qAll('SELECT * FROM activity_log ORDER BY id')
     };
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Content-Disposition', `attachment; filename="light-pressing-${localDate()}.json"`);

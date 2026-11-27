@@ -17,6 +17,7 @@ const { Client } = require('pg');
 const ADMIN_URL = process.env.TEST_DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/postgres';
 const ROOT = path.join(__dirname, '..');
 let nextPort = 3900 + Math.floor(Math.random() * 50);
+const DB_OF_BASE = new Map(); // base URL du serveur → nom de sa base
 
 function dbUrl(name) {
   const u = new URL(ADMIN_URL);
@@ -47,11 +48,12 @@ async function dropDb(name) {
 
 // Démarre `node server.js` et attend qu'il écoute. Échoue si le processus
 // s'arrête avant (ex. « Impossible de démarrer : … »).
-function startServer(name, databaseUrl = dbUrl(name)) {
+function startServer(name, databaseUrl = dbUrl(name), extraEnv = {}) {
   const port = nextPort++;
+  DB_OF_BASE.set(`http://127.0.0.1:${port}`, name);
   const child = spawn(process.execPath, ['server.js'], {
     cwd: ROOT,
-    env: { ...process.env, DATABASE_URL: databaseUrl, PORT: String(port), SESSION_SECRET: 'test-secret', VERCEL: '' },
+    env: { ...process.env, DATABASE_URL: databaseUrl, PORT: String(port), SESSION_SECRET: 'test-secret', VERCEL: '', VERCEL_ENV: '', NODE_ENV: '', INITIAL_ADMIN_PASSWORD: '', ...extraEnv },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let output = '';
@@ -93,6 +95,10 @@ async function login(base, username, password) {
   const call = client(base);
   const r = await call('POST', '/api/login', { username, password });
   assert.equal(r.status, 200, `connexion ${username} : ${JSON.stringify(r.data)}`);
+  // Le serveur bloque tout tant que le mot de passe initial n'est pas changé
+  // (testé à part) : ici on lève l'obligation pour garder les mots de passe connus.
+  if (r.data.user.must_change && DB_OF_BASE.has(base))
+    await sql(DB_OF_BASE.get(base), 'UPDATE users SET must_change=false WHERE username=$1', [username]);
   return call;
 }
 
@@ -213,8 +219,70 @@ describe('base vierge', () => {
     assert.deepEqual(rows.map((u) => u.username), ['gerant', 'superviseur', 'caissier']);
   });
 
+  test('mot de passe initial : tout est refusé tant qu\'il n\'est pas changé', async () => {
+    const call = client(srv.base);
+    let r = await call('POST', '/api/login', { username: 'caissier', password: '1234' });
+    assert.equal(r.status, 200);
+    assert.equal(r.data.user.must_change, true);
+    r = await call('GET', '/api/orders');
+    assert.equal(r.status, 403);
+    assert.equal(r.data.must_change, true);
+    r = await call('GET', '/api/bootstrap');
+    assert.equal(r.status, 200);
+  });
+
   test('parcours caisse complet', async () => {
     await businessFlow(srv, name);
+  });
+
+  test('les permissions fines sont appliquées par le serveur', async () => {
+    const gerant = await login(srv.base, 'gerant', 'nouveau-mdp');
+    const caissier = await login(srv.base, 'caissier', '1234');
+    const item = (await gerant('GET', '/api/catalog')).data[0];
+    let r = await caissier('POST', '/api/orders', { client: 'Perm', phone: '1', payment: 'Crédit', type: 'article', items: [{ id: item.id, qty: 1 }] });
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    const id = r.data.id;
+    r = await gerant('PUT', '/api/permissions', { caissier: { 'payments.create': false, 'orders.status': false } });
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    r = await caissier('POST', `/api/orders/${id}/pay`, { amount: 100, method: 'Espèces' });
+    assert.equal(r.status, 403, 'encaissement retiré au caissier');
+    r = await caissier('PUT', `/api/orders/${id}/status`, { status: 'traitement' });
+    assert.equal(r.status, 403, 'changement de statut retiré au caissier');
+    r = await caissier('PUT', `/api/orders/${id}/status`, { status: 'annule' });
+    assert.equal(r.status, 403, 'annulation interdite par défaut au caissier');
+    r = await gerant('PUT', '/api/permissions', {});
+    assert.equal(r.status, 200);
+  });
+
+  test('tables protégées par RLS (API publique de Supabase)', async () => {
+    const { rows } = await sql(name, `SELECT relname FROM pg_class WHERE relkind='r' AND relnamespace='public'::regnamespace AND NOT relrowsecurity`);
+    assert.deepEqual(rows, []);
+  });
+});
+
+describe('installation de production', () => {
+  const name = 'pp_smoke_prod';
+  after(async () => { await dropDb(name); });
+
+  test('refuse de créer les comptes par défaut sans INITIAL_ADMIN_PASSWORD', async () => {
+    await createDb(name);
+    await assert.rejects(startServer(name, dbUrl(name), { NODE_ENV: 'production' }), /INITIAL_ADMIN_PASSWORD/);
+  });
+
+  test('crée seulement le gérant avec INITIAL_ADMIN_PASSWORD', async () => {
+    await dropDb(name); await createDb(name);
+    const srv = await startServer(name, dbUrl(name), { NODE_ENV: 'production', INITIAL_ADMIN_PASSWORD: 'Mot-de-passe-long' });
+    try {
+      const { rows } = await sql(name, 'SELECT username, must_change FROM users');
+      assert.deepEqual(rows, [{ username: 'gerant', must_change: true }]);
+      const call = client(srv.base);
+      const r = await call('POST', '/api/login', { username: 'gerant', password: '0000' });
+      assert.equal(r.status, 401);
+    } finally { await srv.stop(); }
+  });
+
+  test('refuse de démarrer sans SESSION_SECRET', async () => {
+    await assert.rejects(startServer(name, dbUrl(name), { NODE_ENV: 'production', SESSION_SECRET: '' }), /SESSION_SECRET requise/);
   });
 });
 

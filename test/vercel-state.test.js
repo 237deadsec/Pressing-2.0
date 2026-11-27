@@ -34,7 +34,7 @@ function startVercelInstance() {
   const script = `const app = require('./server.js'); app.listen(${port}, '127.0.0.1', () => console.log('instance prête'));`;
   const child = spawn(process.execPath, ['-e', script], {
     cwd: ROOT,
-    env: { ...process.env, VERCEL: '1', DATABASE_URL: dbUrl(DB), SESSION_SECRET: 'test-secret', PERMISSIONS_TTL_MS: String(TTL_MS) },
+    env: { ...process.env, VERCEL: '1', VERCEL_ENV: '', NODE_ENV: '', INITIAL_ADMIN_PASSWORD: '', DATABASE_URL: dbUrl(DB), SESSION_SECRET: 'test-secret', PERMISSIONS_TTL_MS: String(TTL_MS) },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let out = '';
@@ -70,6 +70,7 @@ async function login(base, username, password, ip) {
   const call = client(base, ip);
   const r = await call('POST', '/api/login', { username, password });
   assert.equal(r.status, 200, `connexion ${username} : ${JSON.stringify(r.data)}`);
+  if (r.data.user.must_change) await sql('UPDATE users SET must_change=false WHERE username=$1', [username]);
   return call;
 }
 

@@ -2,6 +2,10 @@
 
 const { Pool } = require('pg');
 const { hashPwd } = require('./auth');
+const { IS_PROD } = require('./config');
+
+const APP_TABLES = ['users', 'catalog', 'clients', 'orders', 'payments', 'status_history', 'settings',
+  'subscriptions', 'activity_log', 'price_history', 'login_attempts'];
 
 // ── Connection ──────────────────────────────────────────────────
 const DATABASE_URL = process.env.DATABASE_URL;
@@ -173,10 +177,24 @@ async function initDB() {
   }
 
   // ── Données initiales (base vierge uniquement) ───────────────
+  // Comptes initiaux. Les mots de passe par défaut (0000, 2345, 1234) sont
+  // publics (README) : sur une installation en ligne, n'importe qui pourrait
+  // prendre le compte gérant avant le vrai gérant. En production, on exige
+  // donc INITIAL_ADMIN_PASSWORD et on ne crée que le compte gérant.
   const hasUsers = await q1('SELECT 1 FROM users LIMIT 1');
   if (!hasUsers) {
-    for (const [u, n, r, p] of [['gerant','Gérant','gerant','0000'],['superviseur','Superviseur','superviseur','2345'],['caissier','Caissier','caissier','1234']]) {
-      await q('INSERT INTO users(username,name,role,pwd) VALUES($1,$2,$3,$4)', [u, n, r, await hashPwd(p)]);
+    const adminPwd = process.env.INITIAL_ADMIN_PASSWORD;
+    let seed;
+    if (adminPwd) {
+      if (adminPwd.length < 10) throw new Error('INITIAL_ADMIN_PASSWORD : 10 caractères minimum');
+      seed = [['gerant', 'Gérant', 'gerant', adminPwd]];
+    } else if (IS_PROD) {
+      throw new Error('Base vierge : définir INITIAL_ADMIN_PASSWORD pour créer le compte gérant');
+    } else {
+      seed = [['gerant','Gérant','gerant','0000'],['superviseur','Superviseur','superviseur','2345'],['caissier','Caissier','caissier','1234']];
+    }
+    for (const [u, n, r, p] of seed) {
+      await q('INSERT INTO users(username,name,role,pwd) VALUES($1,$2,$3,$4) ON CONFLICT (username) DO NOTHING', [u, n, r, await hashPwd(p)]);
     }
   }
 
@@ -201,6 +219,15 @@ async function initDB() {
     blocked_until TIMESTAMPTZ,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`)) await q('ALTER TABLE login_attempts ENABLE ROW LEVEL SECURITY');
+
+  // Supabase expose le schéma public par son API REST (clé anon). RLS sans
+  // policy = aucune ligne visible par cette API (mots de passe hachés,
+  // clients…). Le rôle applicatif, propriétaire des tables, n'est pas
+  // concerné. Lecture du catalogue d'abord : aucun DDL si c'est déjà fait.
+  const noRls = await qAll(`SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = current_schema() AND c.relkind = 'r' AND NOT c.relrowsecurity
+      AND pg_get_userbyid(c.relowner) = current_user AND c.relname = ANY($1)`, [APP_TABLES]);
+  for (const { relname } of noRls) await q(`ALTER TABLE ${relname} ENABLE ROW LEVEL SECURITY`);
 
   const DEFAULTS = { shop_name:'Light Pressing', shop_address:'Kribi, Dombe après La scierie MMG', shop_phone:'(+237) 696 52 86 10 / 672 38 08 03', shop_niu:'',
     kilo_price:'700', default_delay:'2', invoice_seq:'1', order_seq:'0',
