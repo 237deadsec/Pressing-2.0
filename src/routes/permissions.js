@@ -1,13 +1,14 @@
 const { Router } = require('../router');
 const { q } = require('../db');
 const { fail, ROLES, DEFAULT_PERMISSIONS, getPermissions } = require('../config');
-const { loadPermissions, logActivity } = require('../helpers');
+const { loadPermissions, ensureFreshPermissions, logActivity } = require('../helpers');
 const { auth } = require('../middleware');
 
 const router = Router();
 
 /* GET / — current permissions */
 router.get('/', auth('users.manage'), async (req, res) => {
+  await ensureFreshPermissions();
   res.json({ permissions: getPermissions(), defaults: DEFAULT_PERMISSIONS, roles: ROLES });
 });
 
