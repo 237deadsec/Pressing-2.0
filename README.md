@@ -2,8 +2,6 @@
 
 Logiciel de caisse et de gestion pour un pressing, utilisé par la boutique Light Pressing à Kribi (Cameroun). Montants en FCFA, paiements en Espèces, Mobile Money ou Crédit.
 
-> ⚠️ **État au 27/11/2026 : une installation neuve ne démarre pas.** Le refactor `ecb27c1` (P3.6) a réécrit le schéma de `src/db.js`, qui ne correspond plus aux routes, et `server.js` appelle `initDB()` sans `hashPwd`. Une base déjà créée par une version antérieure continue de fonctionner. Voir [ROADMAP.md](ROADMAP.md), section « À faire en priorité ».
-
 ## Ce que fait l'application
 
 - **Commandes** à l'article (tarif normal ou express) ou au kilo, remises motivées, cycle `déposé → traitement → prêt → livré` (ou annulé). Facture numérotée à la livraison.
@@ -25,7 +23,7 @@ Logiciel de caisse et de gestion pour un pressing, utilisé par la boutique Ligh
 | Auth | Mots de passe scrypt, cookie HttpOnly signé HMAC, valable 12 h |
 | Hébergement | Vercel (fonction serverless, voir `vercel.json`) |
 
-Il n'y a ni tests, ni CI, ni outil de migration : le schéma est créé au démarrage par `initDB()` avec `CREATE TABLE IF NOT EXISTS`.
+Il n'y a pas d'outil de migration : le schéma est créé ou complété au démarrage par `initDB()` (`src/db.js`). Un test de fumée (`test/smoke.test.js`) tourne en CI sur PostgreSQL 16, sur une base vierge et sur une copie du schéma de production.
 
 ## Structure
 
@@ -64,22 +62,24 @@ npm start
 
 Puis ouvrir http://localhost:3000. Le serveur affiche aussi son adresse sur le réseau local, pour les postes de caisse de la boutique.
 
-**Comptes initiaux.** Ils sont créés seulement si la table `users` est vide, et un changement de mot de passe est imposé à la première connexion :
+**Comptes initiaux.** Ils sont créés seulement si la table `users` est vide : `gerant` / `0000`, `superviseur` / `2345`, `caissier` / `1234`. Un changement de mot de passe est imposé à la première connexion. Fais-le immédiatement sur toute installation accessible depuis Internet.
 
-- Code d'avant P3.6 (jusqu'à `81d8261`) : `gerant` / `0000`, `superviseur` / `2345`, `caissier` / `1234`.
-- Code actuel (`ecb27c1`) : `admin` / `admin`, mais ce chemin plante aujourd'hui (voir l'avertissement en haut).
+## Tests
 
-Change ces mots de passe immédiatement sur toute installation accessible depuis Internet.
+```bash
+TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres npm test
+```
+
+`TEST_DATABASE_URL` doit pointer vers une base d'administration : chaque scénario crée puis supprime sa propre base jetable. La CI GitHub Actions (`.github/workflows/ci.yml`) lance le même test.
 
 ## Déployer sur Vercel
 
 1. Importer le dépôt dans Vercel. `vercel.json` envoie toutes les requêtes vers `server.js` (`@vercel/node`) et embarque `public/**`.
 2. Définir `DATABASE_URL` et `SESSION_SECRET` dans Project Settings → Environment Variables (Production et Preview).
-3. Déployer. Vérifier ensuite `GET /api/health`, qui doit renvoyer `{"status":"ok"}`.
+3. Déployer. Attention : au premier appel `/api`, `initDB()` complète le schéma de la base visée. Un déploiement Preview qui partage le `DATABASE_URL` de production modifie donc la base de production. Vérifier ensuite `GET /api/health`, qui doit renvoyer `{"status":"ok"}`.
 
 Limites connues du mode serverless :
 - Les permissions personnalisées et le compteur anti-bruteforce sont gardés **en mémoire par instance**. Une modification de permissions peut ne pas être vue par les autres instances, et l'anti-bruteforce est presque inefficace.
-- Une erreur SQL dans une route `async` n'est pas interceptée par Express 4 et fait tomber l'instance.
 - Les fichiers statiques sont lus en mémoire par `server.js` (contournement de P3.4), pas servis par le CDN.
 
 ## Déployer sur un serveur classique

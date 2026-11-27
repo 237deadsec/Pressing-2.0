@@ -45,12 +45,12 @@ P1.1 est la supposition la plus fragile : la refonte visuelle n'est pas numérot
 
 | # | Élément | État | Preuve |
 |---|---|---|---|
-| P3.1 | Historique des prix du catalogue | ⚠️ | `d19de32`. La table `price_history` n'a jamais été créée par l'ancien code, et le schéma actuel n'a pas les colonnes express : modifier un prix fait planter le serveur. |
+| P3.1 | Historique des prix du catalogue | ✅ | `d19de32`, cassé jusqu'au correctif `122ab0e` (PR #1) qui crée correctement `price_history`. |
 | P3.2 | Permissions fines par module (23 clés, écran d'administration) | ⚠️ | `5fa4575`. Fonctionne, mais les permissions sont en mémoire par instance sur Vercel. |
 | P3.3 | Mode sombre amélioré (contrastes) | ✅ | `2a24434` |
 | P3.4 | PWA : manifest, service worker, page hors ligne | ✅ | `89b54aa` puis 5 correctifs Vercel (`ce1f78d` à `81d8261`) |
 | P3.5 | Animations et micro-interactions | ✅ | `286d194` |
-| P3.6 | Découper `server.js` en modules `src/` | ⚠️ | `ecb27c1`. **Régression** : schéma réécrit incompatible avec les routes, installation neuve impossible. |
+| P3.6 | Découper `server.js` en modules `src/` | ✅ | `ecb27c1`, qui avait cassé le schéma et l'authentification des paramètres. Réparé par `122ab0e` (PR #1). |
 
 ## Après P3 : inconnu
 
@@ -60,8 +60,8 @@ Rien dans le dépôt ne dit ce qui était prévu ensuite (P3.7 ? P4 ?). **À com
 
 Ces éléments viennent de l'état des lieux du 27/11/2026, pas du plan d'origine. Ils sont classés par risque.
 
-1. **Réparer P3.6.** Un seul schéma aligné sur le code, création correcte de `price_history`, passage de `hashPwd` à `initDB()`, interception des erreurs des routes `async`.
-2. **Test de fumée sur un vrai PostgreSQL en CI** : connexion, commande, paiement, livraison, changement de prix. Sans lui, P3.6 se reproduira.
+1. ~~Réparer P3.6~~ : fait dans la PR #1 (schéma restauré, `price_history`, erreurs `async` interceptées).
+2. ~~Test de fumée sur un vrai PostgreSQL en CI~~ : fait dans la PR #1.
 3. **Décider de l'hébergement.** Garder Vercel impose de rendre `SESSION_SECRET` obligatoire et de mettre permissions et anti-bruteforce en base. Un petit serveur toujours allumé évite ces trois problèmes.
 4. **Numérotation des factures dans la transaction de la commande**, pour éviter les trous en cas d'annulation.
 5. **Idée à valider** : SMS ou WhatsApp automatique avec le lien de suivi quand une commande passe à « prêt ».
