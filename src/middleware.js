@@ -3,6 +3,7 @@
 const { readToken } = require('./auth');
 const { q1 }        = require('./db');
 const { fail, hasPermission } = require('./config');
+const { ensureFreshPermissions } = require('./helpers');
 
 // ── Auth middleware factory ─────────────────────────────────────
 // Usage: auth()                – any authenticated user
@@ -22,6 +23,7 @@ const auth = (...rolesOrPerms) => async (req, res, next) => {
     [d.id]
   );
   if (!u) return fail(res, 'Non authentifié', 401);
+  await ensureFreshPermissions();
 
   if (rolesOrPerms.length) {
     const perms = rolesOrPerms.filter((x) => x.includes('.'));
@@ -38,13 +40,18 @@ const auth = (...rolesOrPerms) => async (req, res, next) => {
   next();
 };
 
-// ── Rate-limiting state (login brute-force) ─────────────────────
-const fails = new Map();
-setInterval(() => {
-  const now = Date.now();
-  for (const [k, v] of fails) {
-    if (v.until < now && v.n === 0) fails.delete(k);
+// ── Adresse IP du client ────────────────────────────────────────
+// Maintenant que le blocage par IP est partagé entre instances, une
+// mauvaise IP (celle d'un proxy, commune à tout le monde) bloquerait tous
+// les utilisateurs d'un coup. Sur Vercel on lit donc l'en-tête documenté
+// x-vercel-forwarded-for (IP publique du client).
+// Ailleurs, on garde req.ip (réglé par « trust proxy » dans server.js).
+function clientIp(req) {
+  if (process.env.VERCEL) {
+    const h = req.headers['x-vercel-forwarded-for'] || req.headers['x-real-ip'];
+    if (h) return String(h).split(',')[0].trim();
   }
-}, 600e3);
+  return req.ip || 'unknown';
+}
 
-module.exports = { auth, fails };
+module.exports = { auth, clientIp };

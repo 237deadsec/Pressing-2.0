@@ -4,30 +4,27 @@ const router  = require('../router').Router();
 const { fail, getPermissions } = require('../config');
 const { q, q1, qAll }         = require('../db');
 const { hashPwd, checkPwd, makeToken } = require('../auth');
-const { auth, fails }         = require('../middleware');
+const { auth, clientIp }      = require('../middleware');
+const attempts                = require('../loginAttempts');
 const { publicSettings, pub, logActivity } = require('../helpers');
 
 /* ── POST /api/login ─────────────────────────────────────────── */
 router.post('/login', async (req, res) => {
-  const ip = req.ip || 'unknown';
-  const f = fails.get(ip) || { n: 0, until: 0 };
-  if (f.until > Date.now()) return fail(res, 'Trop de tentatives. Réessayez dans quelques minutes.', 429);
-
+  const ip = clientIp(req);
   const { username = '', password = '' } = req.body || {};
   const uStr = String(username).trim(), pStr = String(password);
+  if (await attempts.isBlocked(ip, uStr))
+    return fail(res, 'Trop de tentatives. Réessayez dans quelques minutes.', 429);
+
   if (!uStr || !pStr) return fail(res, 'Identifiants requis');
   if (pStr.length > 200) return fail(res, 'Mot de passe invalide');
 
   const u = await q1('SELECT * FROM users WHERE username=$1 AND active=true', [uStr]);
   if (!u || !(await checkPwd(pStr, u.pwd))) {
-    f.n++;
-    if (f.n >= 5) { f.until = Date.now() + 5 * 60e3; f.n = 0; }
-    fails.set(ip, f);
-    if (uStr) { const uf = fails.get('u:' + uStr) || { n: 0, until: 0 }; uf.n++; if (uf.n >= 5) { uf.until = Date.now() + 5 * 60e3; uf.n = 0; } fails.set('u:' + uStr, uf); }
+    await attempts.recordFailure(ip, uStr);
     return fail(res, 'Identifiants incorrects', 401);
   }
-  fails.delete(ip);
-  fails.delete('u:' + uStr);
+  await attempts.clearFailures(ip, uStr);
 
   res.setHeader('Set-Cookie', `pp_session=${makeToken(u)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=43200`);
   logActivity(u, 'login', 'user', u.id, `Connexion depuis ${ip}`);

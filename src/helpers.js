@@ -1,7 +1,7 @@
 'use strict';
 
 const { q, q1, qAll } = require('./db');
-const { applyCustomPermissions } = require('./config');
+const { applyCustomPermissions, resetPermissions } = require('./config');
 
 // ── Settings helpers ────────────────────────────────────────────
 const getS = async (k) =>
@@ -98,12 +98,28 @@ async function nextInvoiceNo() {
   return 'FAC-' + String(parseInt(r.value)).padStart(5, '0');
 }
 
-// ── Load custom permissions from DB ─────────────────────────────
+// ── Permissions personnalisées (table settings) ─────────────────
+// Sur Vercel, plusieurs instances tournent en parallèle et chacune a sa
+// propre mémoire. On relit donc la ligne `permissions` en base dès que la
+// copie locale a plus de PERMISSIONS_TTL_MS : une modification faite sur une
+// instance est visible partout en moins de PERMISSIONS_TTL_MS.
+const PERMISSIONS_TTL_MS = Number(process.env.PERMISSIONS_TTL_MS ?? 10000);
+let permsLoadedAt = 0;
+let permsLoading = null;
+
 async function loadPermissions() {
   const row = await q1("SELECT value FROM settings WHERE key='permissions'");
-  if (row?.value) {
-    applyCustomPermissions(JSON.parse(row.value));
-  }
+  resetPermissions();
+  if (row?.value) applyCustomPermissions(JSON.parse(row.value));
+  permsLoadedAt = Date.now();
+}
+
+// Recharge si la copie locale est trop ancienne. Les appels simultanés
+// partagent la même requête.
+async function ensureFreshPermissions() {
+  if (Date.now() - permsLoadedAt < PERMISSIONS_TTL_MS) return;
+  if (!permsLoading) permsLoading = loadPermissions().finally(() => { permsLoading = null; });
+  await permsLoading;
 }
 
 module.exports = {
@@ -116,4 +132,5 @@ module.exports = {
   nextOrderCode,
   nextInvoiceNo,
   loadPermissions,
+  ensureFreshPermissions,
 };
