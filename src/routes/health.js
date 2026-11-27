@@ -1,4 +1,4 @@
-const { Router } = require('express');
+const { Router } = require('../router');
 const { q } = require('../db');
 
 const router = Router();

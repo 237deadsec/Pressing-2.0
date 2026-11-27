@@ -1,4 +1,4 @@
-const { Router } = require('express');
+const { Router } = require('../router');
 const { qAll } = require('../db');
 const { auth } = require('../middleware');
 
