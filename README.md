@@ -78,7 +78,7 @@ TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres npm test
 
 ## Déployer sur Vercel
 
-1. Importer le dépôt dans Vercel. `vercel.json` envoie toutes les requêtes vers `server.js` (`@vercel/node`) et embarque `public/**`.
+1. Importer le dépôt dans Vercel. `vercel.json` envoie toutes les requêtes vers `server.js` (`@vercel/node`), embarque `public/**` et place la fonction à Paris (`cdg1`), près de la base Supabase (`eu-west-3`).
 2. Définir `DATABASE_URL`, `SESSION_SECRET` et, pour une base vierge, `INITIAL_ADMIN_PASSWORD` dans Project Settings → Environment Variables (Production et Preview).
 3. Déployer. Attention : au premier appel `/api`, `initDB()` complète le schéma de la base visée. Un déploiement Preview qui partage le `DATABASE_URL` de production modifie donc la base de production. Vérifier ensuite `GET /api/health`, qui doit renvoyer `{"status":"ok"}`.
 
