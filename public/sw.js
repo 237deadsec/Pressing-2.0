@@ -1,14 +1,15 @@
 /* ═══════════════════════════════════════════════════════════════
    PressingPro — Service Worker (P3.4)
    Strategy:
-     • STATIC_CACHE  → cache-first  (shell: HTML, JS, icons, manifest)
+     • STATIC_CACHE  → network-first (shell: HTML, JS, manifest) — le cache ne sert
+                       qu'hors ligne, sinon une correction déployée n'arrivait jamais
      • RUNTIME_CACHE → stale-while-revalidate (fonts, images, misc assets)
      • API calls     → network-only  (no offline API caching)
      • Offline fallback → /offline.html when network fails on navigation
    ═══════════════════════════════════════════════════════════════ */
 'use strict';
 
-const CACHE_VERSION = 'pp-v1';
+const CACHE_VERSION = 'pp-v2';
 const STATIC_CACHE  = `static-${CACHE_VERSION}`;
 const RUNTIME_CACHE = `runtime-${CACHE_VERSION}`;
 
@@ -63,15 +64,17 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Shell assets → cache first
+  // Shell assets → network first, cache only when offline.
+  // (En cache-first, app.js restait figé sur l'ancienne version après un déploiement.)
   if (SHELL_URLS.includes(url.pathname)) {
     e.respondWith(
-      caches.match(request)
-        .then(cached => cached || fetch(request).then(resp => {
+      fetch(request).then(resp => {
+        if (resp.ok) {
           const clone = resp.clone();
           caches.open(STATIC_CACHE).then(c => c.put(request, clone));
-          return resp;
-        }))
+        }
+        return resp;
+      }).catch(() => caches.match(request))
     );
     return;
   }

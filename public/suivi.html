@@ -180,7 +180,7 @@ function render(d){
 
   // Contact shop
   if(d.shop_phone){
-    const clean=d.shop_phone.replace(/\s/g,'').replace(/^\+/,'');
+    const clean=String(d.shop_phone).replace(/\D/g,'');
     html+=`<div style="text-align:center;margin:8px 0"><a href="https://wa.me/${clean}" target="_blank" class="wa-btn">\u{1F4AC} Contacter le pressing</a></div>`;
   }
 
@@ -188,7 +188,7 @@ function render(d){
   document.getElementById('root').innerHTML=html;
 
   // Title
-  document.title=`Suivi ${esc(d.code)} — ${esc(d.shop_name||'Light Pressing')}`;
+  document.title=`Suivi ${d.code} — ${d.shop_name||'Light Pressing'}`;
 }
 
 load();

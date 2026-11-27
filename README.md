@@ -76,6 +76,15 @@ TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres npm test
 
 `TEST_DATABASE_URL` doit pointer vers une base d'administration : chaque scénario crée puis supprime sa propre base jetable. La CI GitHub Actions (`.github/workflows/ci.yml`) lance le même test.
 
+Tests dans un vrai navigateur (Playwright, dossier `test/e2e/`) : navigation entre les onglets (une seule vue affichée à la fois), échappement de toutes les données saisies (aucun HTML ni script exécuté, application et page de suivi) et parcours complets (commandes, paiements, clients, catalogue, abonnements, utilisateurs, paramètres, rapports, droits du caissier).
+
+```bash
+npx playwright install chromium   # une seule fois
+TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres npm run test:e2e
+```
+
+Le serveur de test recrée la base `pressing_e2e` à chaque lancement.
+
 ## Déployer sur Vercel
 
 1. Importer le dépôt dans Vercel. `vercel.json` envoie toutes les requêtes vers `server.js` (`@vercel/node`), embarque `public/**` et place la fonction à Paris (`cdg1`), près de la base Supabase (`eu-west-3`).
