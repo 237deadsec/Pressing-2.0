@@ -192,13 +192,15 @@ async function initDB() {
     for (const [n, p, pe, i, c] of items) await q('INSERT INTO catalog(name,price,price_express,icon,category) VALUES($1,$2,$3,$4,$5)', [n, p, pe, i, c]);
   }
 
-  // Anti-bruteforce partagé entre instances (voir src/loginAttempts.js)
-  await q(`CREATE TABLE IF NOT EXISTS login_attempts(
+  // Anti-bruteforce partagé entre instances (voir src/loginAttempts.js).
+  // RLS activée sans policy, comme les autres tables : seul le rôle
+  // applicatif (propriétaire) y accède, pas l'API publique de Supabase.
+  if (await createTable('login_attempts', `CREATE TABLE login_attempts(
     key TEXT PRIMARY KEY,
     fails INTEGER NOT NULL DEFAULT 0,
     blocked_until TIMESTAMPTZ,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-  )`);
+  )`)) await q('ALTER TABLE login_attempts ENABLE ROW LEVEL SECURITY');
 
   const DEFAULTS = { shop_name:'Light Pressing', shop_address:'Kribi, Dombe après La scierie MMG', shop_phone:'(+237) 696 52 86 10 / 672 38 08 03', shop_niu:'',
     kilo_price:'700', default_delay:'2', invoice_seq:'1', order_seq:'0',

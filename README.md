@@ -32,7 +32,8 @@ server.js            Configuration Express, routes PWA/SPA, démarrage
 src/config.js        Constantes, rôles, permissions par défaut
 src/db.js            Pool PostgreSQL et initDB() (schéma + données initiales)
 src/auth.js          Hachage des mots de passe et jetons de session
-src/middleware.js    auth(rôle|permission), anti-bruteforce
+src/middleware.js    auth(rôle|permission), IP du client
+src/loginAttempts.js Anti-bruteforce stocké en base
 src/helpers.js       Paramètres, journal, numérotation commandes et factures
 src/routes/*.js      15 routeurs (orders, payments, clients, catalog, ...)
 public/              SPA (index.html, app.js), suivi.html, service worker, manifest
@@ -79,7 +80,9 @@ TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres npm test
 3. Déployer. Attention : au premier appel `/api`, `initDB()` complète le schéma de la base visée. Un déploiement Preview qui partage le `DATABASE_URL` de production modifie donc la base de production. Vérifier ensuite `GET /api/health`, qui doit renvoyer `{"status":"ok"}`.
 
 Limites connues du mode serverless :
-- Les permissions personnalisées et le compteur anti-bruteforce sont gardés **en mémoire par instance**. Une modification de permissions peut ne pas être vue par les autres instances, et l'anti-bruteforce est presque inefficace.
+- Les permissions personnalisées sont relues en base au plus toutes les 10 secondes par instance (`PERMISSIONS_TTL_MS`) : une modification met jusqu'à 10 s à s'appliquer partout.
+- L'anti-bruteforce (5 échecs en 15 min → blocage 5 min, par IP et par nom d'utilisateur) est stocké dans la table `login_attempts`, partagée par toutes les instances. Sur Vercel, l'IP vient de l'en-tête `x-vercel-forwarded-for`.
+- `initDB()` tourne à chaque démarrage à froid, mais ne lance aucun DDL quand le schéma est à jour. En production, le rôle applicatif doit être propriétaire de toutes les tables du schéma `public` (sinon tout `ALTER TABLE` échoue).
 - Les fichiers statiques sont lus en mémoire par `server.js` (contournement de P3.4), pas servis par le CDN.
 
 ## Déployer sur un serveur classique

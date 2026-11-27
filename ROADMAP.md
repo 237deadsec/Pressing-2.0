@@ -46,7 +46,7 @@ P1.1 est la supposition la plus fragile : la refonte visuelle n'est pas numérot
 | # | Élément | État | Preuve |
 |---|---|---|---|
 | P3.1 | Historique des prix du catalogue | ✅ | `d19de32`, cassé jusqu'au correctif `122ab0e` (PR #1) qui crée correctement `price_history`. |
-| P3.2 | Permissions fines par module (23 clés, écran d'administration) | ⚠️ | `5fa4575`. Fonctionne, mais les permissions sont en mémoire par instance sur Vercel. |
+| P3.2 | Permissions fines par module (23 clés, écran d'administration) | ✅ | `5fa4575`. Sur Vercel, les permissions sont relues en base toutes les 10 s par instance depuis le correctif Vercel (PR #5). |
 | P3.3 | Mode sombre amélioré (contrastes) | ✅ | `2a24434` |
 | P3.4 | PWA : manifest, service worker, page hors ligne | ✅ | `89b54aa` puis 5 correctifs Vercel (`ce1f78d` à `81d8261`) |
 | P3.5 | Animations et micro-interactions | ✅ | `286d194` |
@@ -62,6 +62,6 @@ Ces éléments viennent de l'état des lieux du 27/11/2026, pas du plan d'origin
 
 1. ~~Réparer P3.6~~ : fait dans la PR #1 (schéma restauré, `price_history`, erreurs `async` interceptées).
 2. ~~Test de fumée sur un vrai PostgreSQL en CI~~ : fait dans la PR #1.
-3. **Décider de l'hébergement.** Garder Vercel impose de rendre `SESSION_SECRET` obligatoire et de mettre permissions et anti-bruteforce en base. Un petit serveur toujours allumé évite ces trois problèmes.
+3. ~~Décider de l'hébergement~~ : Obam garde Vercel (27/11/2026). Permissions et anti-bruteforce sont en base (PR #5). Reste : rendre `SESSION_SECRET` obligatoire dans le code (il est bien défini en production).
 4. **Numérotation des factures dans la transaction de la commande**, pour éviter les trous en cas d'annulation.
 5. **Idée à valider** : SMS ou WhatsApp automatique avec le lien de suivi quand une commande passe à « prêt ».
