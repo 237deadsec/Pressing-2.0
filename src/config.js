@@ -4,7 +4,18 @@ const crypto = require('crypto');
 
 /* ── Constants ── */
 const PORT = Number(process.env.PORT) || 3000;
+// En production (Vercel, où VERCEL_ENV est toujours défini, ou NODE_ENV=production), un secret aléatoire par
+// instance déconnecterait les utilisateurs au hasard : on refuse de démarrer.
+const IS_PROD = !!process.env.VERCEL_ENV || process.env.NODE_ENV === 'production';
+if (IS_PROD && !process.env.SESSION_SECRET) {
+  console.error('SESSION_SECRET requise en production');
+  process.exit(1);
+}
 const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+
+// Fuseau de la boutique (Kribi : UTC+1). Les serveurs Vercel tournent en UTC :
+// sans ça, une commande passée entre minuit et 1 h serait datée de la veille.
+const APP_TZ = process.env.APP_TZ || 'Africa/Douala';
 
 const ROLES = ['caissier', 'superviseur', 'gerant'];
 const STATUSES = ['depose', 'traitement', 'pret', 'livre', 'annule'];
@@ -19,7 +30,7 @@ const CANCELLABLE = ['depose', 'traitement', 'pret'];
 
 /* ── Utility functions ── */
 const pad = n => String(n).padStart(2, '0');
-const localDate = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const localDate = (d = new Date()) => new Intl.DateTimeFormat('en-CA', { timeZone: APP_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
 const fail = (res, m, c = 400) => res.status(c).json({ error: m });
 
 /* ── Permissions ── */
@@ -81,7 +92,7 @@ function resetPermissions() {
 }
 
 module.exports = {
-  PORT, SESSION_SECRET,
+  PORT, SESSION_SECRET, IS_PROD, APP_TZ,
   ROLES, STATUSES, PAYMENT_MODES, PAYMENT_METHODS, DATE_RE,
   TRANSITIONS, CANCELLABLE,
   pad, localDate, fail,

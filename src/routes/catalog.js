@@ -7,7 +7,7 @@ const { auth }         = require('../middleware');
 const { logActivity }  = require('../helpers');
 
 /* ── GET /api/catalog ────────────────────────────────────────── */
-router.get('/', auth(), async (_req, res) =>
+router.get('/', auth('catalog.view', 'orders.create'), async (_req, res) =>
   res.json(await qAll('SELECT id,name,price,price_express,icon,category FROM catalog WHERE active=true ORDER BY category,name')));
 
 /* ── POST /api/catalog ───────────────────────────────────────── */

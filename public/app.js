@@ -96,8 +96,10 @@ async function doLogout() {
 
 async function bootstrap() {
     try {
-        var t = await api("/api/bootstrap"),
-            e = (U = t.user, S = t.settings, CAT = t.catalog, PERMS = t.permissions || {}, $("login").style.display = "none", $("app").style.display = "block", $("shop-title").textContent = S.shop_name || "PressingPro", $("user-badge").textContent = U.name, $("role-badge").textContent = U.role.charAt(0).toUpperCase() + U.role.slice(1), document.title = S.shop_name || "PressingPro", buildNav(), renderCatalogGrid(), $("o-pkg").value = S.kilo_price, new Date);
+        var t = await api("/api/bootstrap");
+        // Mot de passe initial : le serveur refuse tout le reste tant qu'il n'est pas changé
+        if (t.user.must_change) { U = t.user; $("chpwd-modal").classList.add("open"); return; }
+        var e = (U = t.user, S = t.settings, CAT = t.catalog, PERMS = t.permissions || {}, $("login").style.display = "none", $("app").style.display = "block", $("shop-title").textContent = S.shop_name || "PressingPro", $("user-badge").textContent = U.name, $("role-badge").textContent = U.role.charAt(0).toUpperCase() + U.role.slice(1), document.title = S.shop_name || "PressingPro", buildNav(), renderCatalogGrid(), $("o-pkg").value = S.kilo_price, new Date);
         e.setDate(e.getDate() + (S.default_delay || 2)), $("o-promise").value = e.toISOString().slice(0, 10), $("discount-section").classList.remove("hidden");
         try {
             var a = sessionStorage.getItem("pp_cart");

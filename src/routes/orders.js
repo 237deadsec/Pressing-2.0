@@ -1,7 +1,7 @@
 const { Router } = require('../router');
 const crypto = require('crypto');
 const { pool, q, q1, qAll } = require('../db');
-const { fail, STATUSES, PAYMENT_MODES, PAYMENT_METHODS, DATE_RE, TRANSITIONS, CANCELLABLE } = require('../config');
+const { fail, hasPermission, STATUSES, PAYMENT_MODES, PAYMENT_METHODS, DATE_RE, TRANSITIONS, CANCELLABLE } = require('../config');
 const { getS, logActivity, orderWithPayments, nextOrderCode, nextInvoiceNo } = require('../helpers');
 const { auth } = require('../middleware');
 const { localDate } = require('../config');
@@ -9,7 +9,7 @@ const { localDate } = require('../config');
 const router = Router();
 
 // POST /api/orders — create
-router.post('/', auth(), async (req, res) => {
+router.post('/', auth('orders.create'), async (req, res) => {
   const b = req.body || {}, u = req.user;
   const name = String(b.client || '').trim().slice(0, 100);
   const phone = String(b.phone || '').trim().slice(0, 40);
@@ -61,7 +61,7 @@ router.post('/', auth(), async (req, res) => {
       : (await client.query('INSERT INTO clients(name,phone) VALUES($1,$2) RETURNING id', [name, phone])).rows[0].id;
 
     const day = localDate();
-    const code = await nextOrderCode(day);
+    const code = await nextOrderCode(day, client);
     const now = new Date().toISOString();
     const trackToken = crypto.randomBytes(12).toString('base64url');
 
@@ -98,7 +98,7 @@ router.post('/', auth(), async (req, res) => {
 });
 
 // GET /api/orders — list
-router.get('/', auth(), async (req, res) => {
+router.get('/', auth('orders.view'), async (req, res) => {
   const { status, q: search, from, to, page = '1' } = req.query;
   const w = [], a = [];
   let n = 0;
@@ -121,7 +121,7 @@ router.get('/', auth(), async (req, res) => {
 });
 
 // GET /api/orders/:id — single order
-router.get('/:id', auth(), async (req, res) => {
+router.get('/:id', auth('orders.view'), async (req, res) => {
   const o = await orderWithPayments(+req.params.id);
   if (!o) return fail(res, 'Commande introuvable', 404);
   res.json(o);
@@ -190,7 +190,7 @@ router.put('/:id', auth('orders.edit'), async (req, res) => {
 });
 
 // PUT /api/orders/:id/status — change status
-router.put('/:id/status', auth(), async (req, res) => {
+router.put('/:id/status', auth('orders.status', 'orders.cancel'), async (req, res) => {
   const st = req.body?.status;
   if (!STATUSES.includes(st)) return fail(res, 'Statut invalide');
 
@@ -200,9 +200,10 @@ router.put('/:id/status', auth(), async (req, res) => {
 
   if (st === 'annule') {
     if (!CANCELLABLE.includes(o.status)) return fail(res, 'Impossible d\'annuler une commande ' + o.status);
-    if (role === 'caissier') return fail(res, 'Annulation réservée au superviseur / gérant', 403);
+    if (!hasPermission(role, 'orders.cancel')) return fail(res, 'Annulation non autorisée pour votre rôle', 403);
     if (o.invoice_no && role !== 'gerant') return fail(res, 'Commande facturée : annulation réservée au gérant', 403);
   } else {
+    if (!hasPermission(role, 'orders.status')) return fail(res, 'Changement de statut non autorisé pour votre rôle', 403);
     const allowed = TRANSITIONS[o.status] || [];
     if (!allowed.includes(st)) return fail(res, `Transition ${o.status} → ${st} non autorisée. Transitions possibles : ${allowed.join(', ') || 'aucune'}`);
     if (st === 'livre') {
@@ -220,7 +221,7 @@ router.put('/:id/status', auth(), async (req, res) => {
     let invoice_no = o.invoice_no, delivered_at = o.delivered_at;
     if (st === 'livre') {
       delivered_at = delivered_at || now;
-      if (!invoice_no) invoice_no = await nextInvoiceNo();
+      if (!invoice_no) invoice_no = await nextInvoiceNo(client);
     }
     await client.query('UPDATE orders SET status=$1,delivered_at=$2,invoice_no=$3 WHERE id=$4', [st, delivered_at, invoice_no, o.id]);
     await client.query('INSERT INTO status_history(order_id,old_status,new_status,changed_at,changed_by,note) VALUES($1,$2,$3,$4,$5,$6)',

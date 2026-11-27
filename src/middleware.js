@@ -5,6 +5,8 @@ const { q1 }        = require('./db');
 const { fail, hasPermission } = require('./config');
 const { ensureFreshPermissions } = require('./helpers');
 
+const MUST_CHANGE_ALLOWED = new Set(['/api/bootstrap', '/api/password']);
+
 // ── Auth middleware factory ─────────────────────────────────────
 // Usage: auth()                – any authenticated user
 //        auth('gerant')        – role-based
@@ -23,6 +25,11 @@ const auth = (...rolesOrPerms) => async (req, res, next) => {
     [d.id]
   );
   if (!u) return fail(res, 'Non authentifié', 401);
+  // Mot de passe initial ou réinitialisé : tant qu'il n'est pas changé, seules
+  // la lecture du profil et le changement de mot de passe sont permis.
+  // Avant, cette règle n'existait que dans l'interface.
+  if (u.must_change && !MUST_CHANGE_ALLOWED.has(req.baseUrl + req.path))
+    return res.status(403).json({ error: 'Changez votre mot de passe avant de continuer', must_change: true });
   await ensureFreshPermissions();
 
   if (rolesOrPerms.length) {

@@ -62,6 +62,6 @@ Ces éléments viennent de l'état des lieux du 27/11/2026, pas du plan d'origin
 
 1. ~~Réparer P3.6~~ : fait dans la PR #1 (schéma restauré, `price_history`, erreurs `async` interceptées).
 2. ~~Test de fumée sur un vrai PostgreSQL en CI~~ : fait dans la PR #1.
-3. ~~Décider de l'hébergement~~ : Obam garde Vercel (27/11/2026). Permissions et anti-bruteforce sont en base (PR #5). Reste : rendre `SESSION_SECRET` obligatoire dans le code (il est bien défini en production).
-4. **Numérotation des factures dans la transaction de la commande**, pour éviter les trous en cas d'annulation.
+3. ~~Décider de l'hébergement~~ : Obam garde Vercel (27/11/2026). Permissions et anti-bruteforce sont en base (PR #5). `SESSION_SECRET` est obligatoire en production.
+4. ~~Numérotation des commandes et factures dans la transaction~~ : fait (réinstallation du 27/11/2026), avec aussi : permissions fines appliquées côté serveur, mot de passe initial imposé côté serveur, `SESSION_SECRET` obligatoire, fuseau Africa/Douala, RLS sur toutes les tables, sauvegarde JSON complète, encaissements et abonnements protégés contre les doubles saisies simultanées.
 5. **Idée à valider** : SMS ou WhatsApp automatique avec le lien de suivi quand une commande passe à « prêt ».

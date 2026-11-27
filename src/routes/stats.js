@@ -1,6 +1,6 @@
 const { Router } = require('../router');
 const { q1, qAll } = require('../db');
-const { fail, DATE_RE, localDate } = require('../config');
+const { fail, DATE_RE, localDate, APP_TZ } = require('../config');
 const { auth } = require('../middleware');
 
 const router = Router();
@@ -19,7 +19,7 @@ router.get('/stats', auth('stats.view'), async (req, res) => {
   for (let i = 6; i >= 0; i--) {
     const d = new Date(); d.setDate(d.getDate() - i);
     const r = await q1("SELECT COALESCE(SUM(total),0)::int ca FROM orders WHERE day=$1 AND status!='annule'", [localDate(d)]);
-    days.push({ label: d.toLocaleDateString('fr-FR', { weekday: 'short' }), ca: r.ca });
+    days.push({ label: d.toLocaleDateString('fr-FR', { weekday: 'short', timeZone: APP_TZ }), ca: r.ca });
   }
   const byStatus = await qAll('SELECT status, COUNT(*)::int n FROM orders GROUP BY status');
   res.json({ today, pending, ready, late, due: dueR, days, byStatus });
@@ -30,11 +30,11 @@ router.get('/late-orders', auth('stats.view'), async (req, res) => {
   const t = localDate();
   const rows = await qAll(`
     SELECT o.id, o.code, o.client_name, o.phone, o.status, o.promise_date, o.day,
-      (CURRENT_DATE - o.promise_date::date) AS days_late
+      ($2::date - o.promise_date::date) AS days_late
     FROM orders o
     WHERE o.status IN ('depose','traitement','pret')
       AND o.promise_date IS NOT NULL AND o.promise_date < $1
-    ORDER BY o.promise_date ASC LIMIT 50`, [t]);
+    ORDER BY o.promise_date ASC LIMIT 50`, [t, t]);
   res.json(rows);
 });
 

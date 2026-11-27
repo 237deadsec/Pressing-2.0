@@ -1,6 +1,6 @@
 'use strict';
 
-const { q, q1, qAll } = require('./db');
+const { pool, q, q1, qAll } = require('./db');
 const { applyCustomPermissions, resetPermissions } = require('./config');
 
 // ── Settings helpers ────────────────────────────────────────────
@@ -83,18 +83,20 @@ async function orderWithPayments(id) {
 }
 
 // ── Sequence generators ─────────────────────────────────────────
-async function nextOrderCode(day) {
-  const r = await q1(
+// `db` : client de la transaction en cours, pour qu'une annulation (ROLLBACK)
+// rende aussi le numéro. Sans lui, la commande échouée laissait un trou.
+async function nextOrderCode(day, db = pool) {
+  const r = (await db.query(
     "UPDATE settings SET value = (CAST(value AS INTEGER)+1)::TEXT WHERE key='order_seq' RETURNING value"
-  );
+  )).rows[0];
   const n = parseInt(r.value);
   return 'LP-' + day.slice(2).replace(/-/g, '') + '-' + String(n).padStart(4, '0');
 }
 
-async function nextInvoiceNo() {
-  const r = await q1(
+async function nextInvoiceNo(db = pool) {
+  const r = (await db.query(
     "UPDATE settings SET value = (CAST(value AS INTEGER)+1)::TEXT WHERE key='invoice_seq' RETURNING value"
-  );
+  )).rows[0];
   return 'FAC-' + String(parseInt(r.value)).padStart(5, '0');
 }
 
