@@ -33,8 +33,13 @@ let U = null,
     $ = t => document.getElementById(t),
     $$ = t => document.querySelectorAll(t),
     fmt = t => (t || 0).toLocaleString("fr-FR") + " F",
+    // Numéro WhatsApp : uniquement des chiffres, sinon un numéro saisi avec " sortait de l'attribut href.
+    waPhone = t => String(t ?? "").replace(/\D/g, ""),
     esc = t => String(t ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;"),
-    api = async (t, e = {}) => {
+    api = async (t, e = {}, data) => {
+        // Accepte aussi la forme api(url, "POST", données) utilisée par les écrans
+        // clients et abonnements : sans ça la requête partait en GET et rien n'était enregistré.
+        if (typeof e === "string") e = data === undefined ? { method: e } : { method: e, body: JSON.stringify(data) };
         t = await fetch(t, {
             headers: {
                 "Content-Type": "application/json"
@@ -192,7 +197,10 @@ function buildNav() {
 }
 
 function nav(e) {
-    currentPage = e, $$("page").forEach(t => t.classList.remove("active"));
+    // ".page" (classe) : l'ancien sélecteur "page" ciblait une balise <page> inexistante,
+    // donc les vues précédentes ne se masquaient jamais et s'empilaient à l'écran.
+    currentPage = e, $$(".page").forEach(t => t.classList.remove("active"));
+    window.scrollTo(0, 0);
     var t = $("p-" + e);
     t && t.classList.add("active"), $$("#nav button").forEach(t => t.classList.toggle("active", t.dataset.page === e)), $("sidebar").classList.remove("open"), $("overlay").classList.remove("open"), "dashboard" === e && loadDashboard(), "orders" === e && (ordersPage = 1, loadOrders()), "clients" === e && loadClients(), "creances" === e && loadCreances(), "catalog" === e && loadCatalogAdmin(), "subscriptions" === e && loadSubscriptions(), "users" === e && loadUsers(), "settings" === e && loadSettings(), "reports" === e && initReports(), "activity" === e && loadActivityLog()
 }
@@ -236,7 +244,7 @@ async function loadLateAlerts() {
             <td>${esc(r.status)}</td>
             <td>${r.promise_date || "-"}</td>
             <td class="text-right" style="color:var(--err);font-weight:600">${r.days_late}j</td>
-            <td><button class="btn-sm" onclick="nav('orders');$('search-orders').value='${esc(r.code)}';loadOrders()">Voir</button></td>
+            <td><button class="btn-sm" onclick="showOrder(${+r.id})">Voir</button></td>
           </tr>`).join("")}</tbody></table></div>
         </div>`;
     } catch (e) { el.innerHTML = ""; }
@@ -409,7 +417,7 @@ function showReceipt(t, e) {
         }), d += "</table>") : "kilo" === t.type && (d += `<div>${t.weight} kg × ${fmt(t.price_kg)}/kg</div>`, t.kilo_items) && (d += `<div style="font-size:${n.fs}">${esc(t.kilo_items)}</div>`), d += `<hr><div><strong>Sous-total : ${fmt(t.subtotal)}</strong></div>`, t.discount && (d += `<div>Remise : -${fmt(t.discount)}${t.discount_reason?" ("+esc(t.discount_reason)+")":""}</div>`), d = (d += `<div style="font-size:1.1em"><strong>Total : ${fmt(t.total)}</strong></div>`) + `<hr><div>Payé : ${fmt(t.paid_total)}</div>`, 0 < t.balance ? d += `<div style="color:red"><strong>Reste à payer : ${fmt(t.balance)}</strong></div>` : d += '<div style="color:green"><strong>Soldé</strong></div>', t.payments && t.payments.length && (d += `<div style="font-size:${n.fs};margin-top:4px">Paiements :</div>`, t.payments.forEach(t => {
             d += `<div style="font-size:${n.fs}">  ${fmt(t.amount)} (${esc(t.method)}) — ${new Date(t.created_at).toLocaleString("fr-FR")}</div>`
         })), d += `<hr><div class="center" style="font-size:${n.fs}">${esc(i)}</div></div>`, "");
-    e && t.track_token && t.phone && (l = location.origin + "/suivi/" + t.track_token, o = t.phone.replace(/\s/g, "").replace(/^\+/, ""), r = encodeURIComponent(`Bonjour ${esc(t.client_name)},\nVotre dépôt ${esc(t.code)} a été enregistré chez ${esc(s)}.\n\nSuivez l'avancement ici :\n${l}\n\nMerci pour votre confiance !`), c = `<a href="https://wa.me/${o}?text=${r}" target="_blank" class="btn btn-sm" style="background:#25D366;border:none;display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:#fff">💬 Envoyer sur WhatsApp</a>`), showModal(`<h3>${e?"🧾 Bon de dépôt":"🧾 Facture"}</h3>${d}\n    <div class="actions"><button class="btn-o" onclick="closeModal()">Fermer</button>\n    ${c}\n    <button class="btn" onclick="printReceipt()">🖨️ Imprimer</button></div>`), $("receipt-print").innerHTML = d
+    e && t.track_token && t.phone && (l = location.origin + "/suivi/" + t.track_token, o = waPhone(t.phone), r = encodeURIComponent(`Bonjour ${t.client_name},\nVotre dépôt ${t.code} a été enregistré chez ${s}.\n\nSuivez l'avancement ici :\n${l}\n\nMerci pour votre confiance !`), c = `<a href="https://wa.me/${o}?text=${r}" target="_blank" class="btn btn-sm" style="background:#25D366;border:none;display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:#fff">💬 Envoyer sur WhatsApp</a>`), showModal(`<h3>${e?"🧾 Bon de dépôt":"🧾 Facture"}</h3>${d}\n    <div class="actions"><button class="btn-o" onclick="closeModal()">Fermer</button>\n    ${c}\n    <button class="btn" onclick="printReceipt()">🖨️ Imprimer</button></div>`), $("receipt-print").innerHTML = d
 }
 
 function printReceipt() {
@@ -466,7 +474,7 @@ async function showOrder(t) {
                 livre: "📦 Livrer"
             } [t] || t;
             s += `<button class="btn btn-sm" onclick="changeStatus(${a.id},'${t}')">${e}</button>`
-        }), "depose"===a.status&&hasPerm('orders.edit')&&(s+=`<button class="btn btn-sm" style="background:var(--pri)" onclick="showEditOrderModal(${a.id})">✏️ Éditer</button>`), l && (s += `<button class="btn-d btn-sm" onclick="changeStatus(${a.id},'annule')">❌ Annuler</button>`), "annule" !== a.status && (s += `<button class="btn-o btn-sm" onclick="printOrder(${a.id},'${"livre"===a.status?"facture":"depot"}')">🖨️ ${"livre"===a.status?"Facture":"Bon"}</button>`), a.track_token && a.phone && (e = location.origin + "/suivi/" + a.track_token, o = a.phone.replace(/\s/g, "").replace(/^\+/, ""), i = encodeURIComponent("Bonjour " + esc(a.client_name) + ",\nSuivez votre commande " + esc(a.code) + " ici :\n" + e), s = s + `<a href="https://wa.me/${o}?text=${i}" target="_blank" class="btn btn-sm" style="background:#25D366;border:none;display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:#fff">💬 WhatsApp</a>` + `<button class="btn-o btn-sm" onclick="navigator.clipboard.writeText('${e}');toast('Lien copié !','ok')">📋 Copier lien suivi</button>`), s += "</div></div>", $("order-detail-content").innerHTML = s
+        }), "depose"===a.status&&hasPerm('orders.edit')&&(s+=`<button class="btn btn-sm" style="background:var(--pri)" onclick="showEditOrderModal(${a.id})">✏️ Éditer</button>`), l && (s += `<button class="btn-d btn-sm" onclick="changeStatus(${a.id},'annule')">❌ Annuler</button>`), "annule" !== a.status && (s += `<button class="btn-o btn-sm" onclick="printOrder(${a.id},'${"livre"===a.status?"facture":"depot"}')">🖨️ ${"livre"===a.status?"Facture":"Bon"}</button>`), a.track_token && a.phone && (e = location.origin + "/suivi/" + a.track_token, o = waPhone(a.phone), i = encodeURIComponent("Bonjour " + a.client_name + ",\nSuivez votre commande " + a.code + " ici :\n" + e), s = s + `<a href="https://wa.me/${o}?text=${i}" target="_blank" class="btn btn-sm" style="background:#25D366;border:none;display:inline-flex;align-items:center;gap:6px;text-decoration:none;color:#fff">💬 WhatsApp</a>` + `<button class="btn-o btn-sm" onclick="navigator.clipboard.writeText('${e}');toast('Lien copié !','ok')">📋 Copier lien suivi</button>`), s += "</div></div>", $("order-detail-content").innerHTML = s
     } catch (t) {
         toast(t.message, "err"), nav("orders")
     }
@@ -514,7 +522,7 @@ async function printOrder(t, e) {
 }
 
 /* ── P2.5 : Édition commande post-création ── */
-let EDIT_CART = [], EDIT_ORDER_TYPE = "article";
+let EDIT_CART = [], EDIT_ORDER_TYPE = "article", EDIT_CATALOG = [];
 
 async function showEditOrderModal(orderId) {
     try {
@@ -528,6 +536,7 @@ async function showEditOrderModal(orderId) {
         if (o.type === "article") {
             // Load catalog for article editing
             const catalog = await api("/api/catalog");
+            EDIT_CATALOG = catalog;
             const items = o.items || [];
             EDIT_CART = items.map(it => ({ id: it.id, name: it.name, icon: it.icon || "", price: it.price, qty: it.qty, express: it.express || false }));
 
@@ -535,8 +544,9 @@ async function showEditOrderModal(orderId) {
             html += `<div id="edit-cart-list"></div>`;
             html += `<details style="margin:12px 0"><summary style="cursor:pointer;font-weight:600">➕ Ajouter un article</summary>`;
             html += `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-top:8px">`;
-            catalog.filter(c => c.active).forEach(c => {
-                html += `<button class="btn-o btn-sm" style="text-align:left" onclick="editAddItem(${c.id},'${esc(c.name).replace(/'/g,"\\'")}','${esc(c.icon||"").replace(/'/g,"\\'")}',${c.price},${c.price_express||0})">${esc(c.icon||"")} ${esc(c.name)} — ${fmt(c.price)}</button>`;
+            // /api/catalog ne renvoie que les articles actifs, sans champ « active » : filtrer dessus vidait la liste.
+            catalog.filter(c => c.active !== false).forEach(c => {
+                html += `<button class="btn-o btn-sm" style="text-align:left" onclick="editAddItem(${+c.id})">${esc(c.icon||"")} ${esc(c.name)} — ${fmt(c.price)}</button>`;
             });
             html += `</div></details>`;
         } else {
@@ -603,7 +613,12 @@ function editCartRemove(idx) {
     renderEditCart();
 }
 
-function editAddItem(id, name, icon, price, priceExpress) {
+// Les données du catalogue sont relues ici plutôt que passées dans l'attribut onclick :
+// un nom contenant ' ou " cassait le code JavaScript de l'attribut.
+function editAddItem(id) {
+    const c = EDIT_CATALOG.find(x => x.id === id);
+    if (!c) return;
+    const name = c.name, icon = c.icon || "", price = c.price, priceExpress = c.price_express || 0;
     const isExpress = document.getElementById("edit-express")?.checked || false;
     const unitPrice = isExpress && priceExpress > 0 ? priceExpress : price;
     const existing = EDIT_CART.findIndex(it => it.id === id);
@@ -722,7 +737,7 @@ async function createClient() {
             notes: ($("nc-notes").value || "").trim()
         });
         closeModal();
-        toast("Client créé : " + esc(c.name));
+        toast("Client créé : " + c.name, "ok");
         loadClients();
     } catch (t) {
         toast(t.message, "err");
@@ -1335,7 +1350,7 @@ function printReport() {
     const content = $('report-content').innerHTML;
     const title = (S.shop_name||'PressingPro') + ' — Rapport du ' + $('rp-from').value + ' au ' + $('rp-to').value;
     const w = window.open('', '_blank');
-    w.document.write(`<!DOCTYPE html><html><head><title>${title}</title>
+    w.document.write(`<!DOCTYPE html><html><head><title>${esc(title)}</title>
     <style>body{font-family:system-ui,sans-serif;padding:20px;color:#222}
     h1{font-size:1.2rem;margin-bottom:16px}
     table{border-collapse:collapse;width:100%;margin:12px 0}
@@ -1348,7 +1363,7 @@ function printReport() {
     .grid3{display:flex;flex-wrap:wrap;gap:8px}
     .mt-8{margin-top:8px}.mt-16{margin-top:16px}
     @media print{body{padding:0}}</style></head>
-    <body><h1>${title}</h1>${content}</body></html>`);
+    <body><h1>${esc(title)}</h1>${content}</body></html>`);
     w.document.close();
     w.print();
 }
@@ -1414,16 +1429,23 @@ function resetActivityFilters() {
 /* ══════ SECTION 15 : MODAL & ÉCOUTEURS GLOBAUX ══════════════════ */
 
 function showModal(t) {
-    $("generic-modal-body").innerHTML = t, $("generic-modal").classList.add("open")
+    const m = $("generic-modal");
+    // Annule une fermeture en cours : sinon la fin de l'animation refermait la nouvelle fenêtre.
+    clearTimeout(closeModal.timer);
+    $("generic-modal-body").innerHTML = t, m.classList.remove("closing"), m.classList.add("open")
+}
+
+// Fenêtre avec titre, contenu et boutons (utilisée par « Nouveau client »).
+function modal(title, body, actions) {
+    showModal(`<h3>${esc(title)}</h3>${body}<div class="actions"><button class="btn-o" onclick="closeModal()">Annuler</button>${actions || ""}</div>`);
 }
 
 function closeModal() {
     const m = $("generic-modal");
-    if (!m.classList.contains("open")) return;
+    if (!m.classList.contains("open") || m.classList.contains("closing")) return;
     m.classList.add("closing");
-    m.addEventListener("animationend", function() {
-        m.classList.remove("open", "closing");
-    }, { once: true });
+    clearTimeout(closeModal.timer);
+    closeModal.timer = setTimeout(() => m.classList.remove("open", "closing"), 250);
 }
 
 $("os-q").addEventListener("keydown", t => {
