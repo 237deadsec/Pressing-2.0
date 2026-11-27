@@ -1,4 +1,4 @@
-const { Router } = require('express');
+const { Router } = require('../router');
 const { q, qAll } = require('../db');
 const { fail, PAYMENT_METHODS } = require('../config');
 const { orderWithPayments, logActivity } = require('../helpers');

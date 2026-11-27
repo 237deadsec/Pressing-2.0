@@ -1,4 +1,4 @@
-const { Router } = require('express');
+const { Router } = require('../router');
 const { qAll } = require('../db');
 const { fail, localDate } = require('../config');
 const { auth } = require('../middleware');

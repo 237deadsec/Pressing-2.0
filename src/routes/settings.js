@@ -1,10 +1,11 @@
-const { Router } = require('express');
+const { Router } = require('../router');
 const router = Router();
 const { fail } = require('../config');
 const { setS, logActivity, publicSettings } = require('../helpers');
+const { auth } = require('../middleware');
 
 // PUT /api/settings
-router.put('/', async (req, res) => {
+router.put('/', auth('settings.manage'), async (req, res) => {
   const b = req.body || {};
   const kp = Math.round(+b.kilo_price), dd = Math.round(+b.default_delay);
   const mdp = Math.round(+b.max_discount_percent);
@@ -28,7 +29,7 @@ router.put('/', async (req, res) => {
 });
 
 // POST /api/settings/logo
-router.post('/logo', async (req, res) => {
+router.post('/logo', auth('settings.manage'), async (req, res) => {
   const logo = String(req.body?.logo || '').trim();
   if (logo && !logo.startsWith('data:image/')) return fail(res, 'Format logo invalide (data:image/… attendu)');
   if (logo.length > 1500000) return fail(res, 'Logo trop volumineux (max ~1 Mo)');
@@ -37,7 +38,7 @@ router.post('/logo', async (req, res) => {
 });
 
 // DELETE /api/settings/logo
-router.delete('/logo', async (req, res) => {
+router.delete('/logo', auth('settings.manage'), async (req, res) => {
   await setS('invoice_logo', '');
   res.json({ ok: true });
 });
