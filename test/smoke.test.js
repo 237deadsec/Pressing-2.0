@@ -47,11 +47,11 @@ async function dropDb(name) {
 
 // Démarre `node server.js` et attend qu'il écoute. Échoue si le processus
 // s'arrête avant (ex. « Impossible de démarrer : … »).
-function startServer(name) {
+function startServer(name, databaseUrl = dbUrl(name)) {
   const port = nextPort++;
   const child = spawn(process.execPath, ['server.js'], {
     cwd: ROOT,
-    env: { ...process.env, DATABASE_URL: dbUrl(name), PORT: String(port), SESSION_SECRET: 'test-secret', VERCEL: '' },
+    env: { ...process.env, DATABASE_URL: databaseUrl, PORT: String(port), SESSION_SECRET: 'test-secret', VERCEL: '' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let output = '';
@@ -261,5 +261,69 @@ describe('base existante (schéma de production)', () => {
     await srv.stop();
     srv = await startServer(name);
     assert.deepEqual(await snapshot(), before1);
+  });
+});
+
+// Reproduit les droits de la production Supabase : l'application se connecte
+// avec un rôle qui possède toutes les tables SAUF price_history (créée à la
+// main par « postgres », avec la RLS activée et sans policy). Un ALTER TABLE
+// ou CREATE INDEX lancé « au cas où » par initDB y échoue avec
+// « must be owner of table price_history » et l'API entière tombe en 503.
+describe('rôle applicatif non propriétaire (droits de production)', () => {
+  const name = 'pp_smoke_roles';
+  const role = 'pp_smoke_app';
+  let srv, appUrl;
+  before(async () => {
+    await createDb(name);
+    await withAdmin(async (c) => {
+      await c.query(`DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${role}') THEN
+          CREATE ROLE ${role} LOGIN PASSWORD 'pp_smoke_pwd' NOSUPERUSER NOBYPASSRLS;
+        END IF; END $$`);
+    });
+    const c = new Client({ connectionString: dbUrl(name) });
+    await c.connect();
+    await c.query(fs.readFileSync(path.join(__dirname, 'fixtures', 'legacy-prod.sql'), 'utf8'));
+    await c.query(`
+      SET search_path = public;
+      GRANT USAGE, CREATE ON SCHEMA public TO ${role};
+      DROP TABLE price_history;
+      CREATE TABLE price_history (
+        id SERIAL PRIMARY KEY,
+        catalog_id integer NOT NULL REFERENCES catalog(id) ON DELETE CASCADE,
+        old_price integer NOT NULL, new_price integer NOT NULL,
+        old_price_express integer DEFAULT 0 NOT NULL, new_price_express integer DEFAULT 0 NOT NULL,
+        changed_by integer REFERENCES users(id),
+        changed_at timestamptz DEFAULT now() NOT NULL);
+      CREATE INDEX idx_price_history_catalog ON price_history(catalog_id);
+      ALTER TABLE price_history ENABLE ROW LEVEL SECURITY;
+      GRANT SELECT, INSERT ON price_history TO ${role};
+      GRANT USAGE ON SEQUENCE price_history_id_seq TO ${role};`);
+    for (const t of ['users', 'catalog', 'clients', 'orders', 'payments', 'status_history', 'settings', 'subscriptions', 'activity_log'])
+      await c.query(`ALTER TABLE ${t} OWNER TO ${role}`);
+    await c.end();
+    const u = new URL(dbUrl(name));
+    u.username = role; u.password = 'pp_smoke_pwd';
+    appUrl = u.toString();
+    srv = await startServer(name, appUrl);
+  });
+  after(async () => {
+    if (srv) await srv.stop();
+    await dropDb(name);
+    await withAdmin((c) => c.query(`DROP ROLE IF EXISTS ${role}`));
+  });
+
+  test('démarre sans lancer de DDL sur price_history', async () => {
+    const call = await login(srv.base, 'gerant', '0000');
+    const r = await call('GET', '/api/bootstrap');
+    assert.equal(r.status, 200, JSON.stringify(r.data));
+    const h = await call('GET', '/api/health');
+    assert.equal(h.status, 200);
+  });
+
+  test('parcours caisse complet une fois price_history rendue au rôle applicatif', async () => {
+    // Correctif appliqué en production : ALTER TABLE price_history OWNER TO <rôle app>
+    await sql(name, `ALTER TABLE price_history OWNER TO ${role}`);
+    await businessFlow(srv, name);
   });
 });
