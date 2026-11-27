@@ -5,9 +5,12 @@
   "description": "Gestion et facturation de pressing — PostgreSQL, déployable Vercel/Docker",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "test": "node --test test/smoke.test.js"
   },
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "express": "^4.21.0",
     "pg": "^8.13.0"

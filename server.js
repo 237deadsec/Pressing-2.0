@@ -166,7 +166,13 @@ app.get('*', (req, res) => {
   res.type('html').send(INDEX_HTML);
 });
 
-app.use((err, req, res, next) => { console.error(err); fail(res, 'Erreur serveur', 500); });
+// Gestionnaire d'erreurs final : reçoit les erreurs des routes (y compris
+// async, via src/router.js). Répond 500 au lieu de laisser le processus tomber.
+app.use((err, req, res, next) => {
+  console.error(`[${req.method} ${req.originalUrl}]`, err);
+  if (res.headersSent) return next(err);
+  fail(res, 'Erreur serveur', 500);
+});
 
 /* ── Arrêt propre ── */
 let server;

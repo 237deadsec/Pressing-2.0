@@ -1,6 +1,5 @@
 'use strict';
-const express = require('express');
-const router  = express.Router();
+const router  = require('../router').Router();
 
 const { fail, getPermissions } = require('../config');
 const { q, q1, qAll }         = require('../db');
