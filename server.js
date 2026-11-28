@@ -10,6 +10,7 @@ const os = require('os');
 const { PORT, fail } = require('./src/config');
 const { pool, initDB } = require('./src/db');
 const { loadPermissions } = require('./src/helpers');
+const { router: shellRouter, sendIndex } = require('./src/shell');
 
 /* ── Route modules ── */
 const authRouter          = require('./src/routes/auth');
@@ -44,7 +45,11 @@ app.use((req, res, next) => {
   next();
 });
 
+// index.html, app.js et /api/version : servis par src/shell.js (versionnés, voir ce fichier).
+app.use(shellRouter);
+
 app.use(express.static(path.join(__dirname, 'public'), {
+  index: false,
   setHeaders(res, filePath) {
     if (filePath.endsWith('sw.js')) {
       res.setHeader('Cache-Control', 'no-cache');
@@ -153,18 +158,8 @@ app.get('/icons/:file', (req, res) => {
   } catch { res.status(404).end(); }
 });
 
-// SPA fallback — serve index.html from memory
-let INDEX_HTML;
-try {
-  INDEX_HTML = fs.readFileSync(path.join(PWA_DIR, 'index.html'), 'utf8');
-} catch {
-  try { INDEX_HTML = fs.readFileSync(path.resolve('public', 'index.html'), 'utf8'); }
-  catch { console.error('[SPA] Could not load index.html'); }
-}
-app.get('*', (req, res) => {
-  if (!INDEX_HTML) return res.status(500).send('Application unavailable');
-  res.type('html').send(INDEX_HTML);
-});
+// SPA fallback — index.html versionné, jamais mis en cache (src/shell.js)
+app.get('*', sendIndex);
 
 // Gestionnaire d'erreurs final : reçoit les erreurs des routes (y compris
 // async, via src/router.js). Répond 500 au lieu de laisser le processus tomber.
