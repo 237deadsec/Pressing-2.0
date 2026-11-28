@@ -152,7 +152,9 @@ test('abonnements : création et utilisation', async ({ page }) => {
   await loginAs(page, 'gerant');
   await nav(page, 'subscriptions');
   await page.locator('#p-subscriptions button', { hasText: /Nouvel|Ajouter/ }).first().click();
-  await expect(page.locator('#sub-client option')).not.toHaveCount(1);
+  // Attendre les vrais clients : avant, « Chargement... » comptait comme une option
+  // et le test pouvait le sélectionner (course visible en CI).
+  await expect(page.locator('#sub-client option:not([value=""])')).not.toHaveCount(0);
   await page.selectOption('#sub-client', { index: 1 });
   await page.fill('#sub-plan', 'Formule 20');
   await page.fill('#sub-total', '20');

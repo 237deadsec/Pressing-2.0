@@ -125,6 +125,9 @@ select option{background:var(--bg2);color:var(--txt)}
 
 /* Page cards */
 .page{display:none}.page.active{display:block}
+.update-banner{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:10000;display:flex;gap:.75rem;align-items:center;background:#1e293b;color:#fff;padding:.6rem .9rem;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.25);font-size:.9rem;max-width:calc(100% - 32px)}
+.update-banner[hidden]{display:none}
+.update-banner button{background:#38bdf8;color:#0f172a;border:0;border-radius:8px;padding:.4rem .8rem;font-weight:600;cursor:pointer}
 .card{
   background:var(--card);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));
   border:1px solid var(--card-border);border-radius:var(--radius);
@@ -668,23 +671,41 @@ input:focus,select:focus,textarea:focus{
 <div id="receipt-print" style="display:none"></div>
 
 <script src="/app.js"></script>
+<div id="update-banner" class="update-banner" role="status" hidden>
+  <span>Une nouvelle version de l'application est disponible.</span>
+  <button type="button" onclick="location.reload()">Mettre à jour</button>
+</div>
 <script>
-if('serviceWorker' in navigator){
-  window.addEventListener('load',()=>{
-    navigator.serviceWorker.register('/sw.js')
-      .then(r=>{
-        r.addEventListener('updatefound',()=>{
-          const w=r.installing;
-          if(w) w.addEventListener('statechange',()=>{
-            if(w.state==='installed'&&navigator.serviceWorker.controller){
-              if(typeof toast==='function') toast('Mise à jour disponible — rechargez','info');
-            }
-          });
-        });
-      })
-      .catch(e=>console.warn('SW registration failed:',e));
-  });
-}
+/* Mises à jour : une page restée ouverte (onglet, appli installée sur le téléphone)
+   continue sinon d'exécuter l'ancien code indéfiniment. On compare la version
+   chargée à celle du serveur au retour sur l'appli et toutes les 5 minutes. */
+(function(){
+  var reg=null, stale=false;
+  if('serviceWorker' in navigator){
+    window.addEventListener('load',function(){
+      navigator.serviceWorker.register('/sw.js',{updateViaCache:'none'})
+        .then(function(r){ reg=r; })
+        .catch(function(e){ console.warn('SW registration failed:',e); });
+    });
+  }
+  function busy(){
+    // Ne jamais recharger sous les doigts : saisie en cours ou fenêtre ouverte.
+    return (typeof currentPage!=='undefined' && currentPage==='neworder')
+      || !!document.querySelector('.modal-overlay.open');
+  }
+  function check(fromResume){
+    if(!window.APP_VERSION) return;
+    if(reg) reg.update().catch(function(){});
+    fetch('/api/version',{cache:'no-store'}).then(function(r){ return r.ok?r.json():null; }).then(function(d){
+      if(!d||!d.version||d.version===window.APP_VERSION) return;
+      if(fromResume && !busy()) return location.reload();
+      if(!stale){ stale=true; document.getElementById('update-banner').hidden=false; }
+    }).catch(function(){});
+  }
+  window.checkAppUpdate=check;
+  document.addEventListener('visibilitychange',function(){ if(document.visibilityState==='visible') check(true); });
+  setInterval(function(){ check(false); },5*60*1000);
+})();
 </script>
 </body>
 </html>

@@ -1232,7 +1232,7 @@ async function showSubModal(editId) {
     }
     const clientsHtml = CLIENTS_CACHE.length
         ? CLIENTS_CACHE.map(c => `<option value="${c.id}" ${sub && sub.client_id===c.id?'selected':''}>${esc(c.name)} - ${esc(c.phone)}</option>`).join('')
-        : '<option value="">Chargement...</option>';
+        : '<option value="" disabled>Chargement...</option>';
     const defaultEnd = new Date(Date.now()+30*86400000).toISOString().slice(0,10);
     showModal(`<h3>${sub?'Modifier':'Nouvel'} abonnement</h3>
       <div class="form-group"><label>Client</label><select id="sub-client" ${sub?'disabled':''}><option value="">-- Sélectionner --</option>${clientsHtml}</select></div>
